@@ -17,4 +17,6 @@ git clone
 cd pace
 open Pace.xcodeproj
 # open it in Xcode, Build and run in Xcode
+```
+
 ![alt text](image.png)
