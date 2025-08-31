@@ -5,7 +5,7 @@
 
 ## What is Pace?
 ```bash
-A. Reading focus tool. 
+A. Reading focus tool for MacOS. 
 B. Overlay window to help with focus. 
 # Insipred by the ADHD Accessibility feature in https://www.ux4g.gov.in/
 ```
