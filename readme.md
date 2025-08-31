@@ -11,9 +11,8 @@ Insipred by the ADHD Accessibility feature in https://www.ux4g.gov.in/
 
 ## Installation
 
-### Build from Source
 ```bash
-git clone 
+git clone this repo
 cd pace
 open Pace.xcodeproj
 # open it in Xcode, Build and run in Xcode
