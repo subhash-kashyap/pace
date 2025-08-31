@@ -4,10 +4,11 @@
 [![Swift](https://img.shields.io/badge/Swift-5.5+-orange.svg)](https://swift.org/)
 
 ## What is Pace?
+```bash
 A. Reading focus tool. 
 B. Overlay window to help with focus. 
 #Insipred by the ADHD Accessibility feature in https://www.ux4g.gov.in/
-
+```
 
 ## Installation
 
