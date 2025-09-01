@@ -3,20 +3,18 @@ import AppKit
 
 struct OverlayContentView: View {
     @StateObject private var mouseTracker = GlobalMouseTracker()
-    let bandHeight: CGFloat = 200
+    @ObservedObject var appDelegate: AppDelegate // Get height from AppDelegate
     
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Black overlay with transparent band
                 Rectangle()
                     .fill(Color.black.opacity(0.8))
                     .mask(
-                        // Create mask that cuts out the focus band
                         Rectangle()
                             .overlay(
                                 Rectangle()
-                                    .frame(height: bandHeight)
+                                    .frame(height: appDelegate.bandHeight) // Dynamic height!
                                     .position(
                                         x: geo.size.width / 2,
                                         y: mouseTracker.mouseY
@@ -25,17 +23,18 @@ struct OverlayContentView: View {
                             )
                     )
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseY)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight) // Smooth height changes
                 
-                // Optional: Subtle grid overlay
                 GridOverlay()
                     .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
                     .allowsHitTesting(false)
             }
         }
         .ignoresSafeArea()
-        .allowsHitTesting(false) // Ensures click-through for the entire SwiftUI view
+        .allowsHitTesting(false)
     }
 }
+
 
 struct GridOverlay: Shape {
     func path(in rect: CGRect) -> Path {
