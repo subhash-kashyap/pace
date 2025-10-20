@@ -3,18 +3,18 @@ import AppKit
 
 struct OverlayContentView: View {
     @StateObject private var mouseTracker = GlobalMouseTracker()
-    @ObservedObject var appDelegate: AppDelegate // Get height from AppDelegate
+    @ObservedObject var appDelegate: AppDelegate
     
     var body: some View {
         GeometryReader { geo in
             ZStack {
                 Rectangle()
-                    .fill(Color.black.opacity(0.8))
+                    .fill(Color.black.opacity(0.95))
                     .mask(
                         Rectangle()
                             .overlay(
                                 Rectangle()
-                                    .frame(height: appDelegate.bandHeight) // Dynamic height!
+                                    .frame(height: appDelegate.bandHeight)
                                     .position(
                                         x: geo.size.width / 2,
                                         y: mouseTracker.mouseY
@@ -23,31 +23,28 @@ struct OverlayContentView: View {
                             )
                     )
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseY)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight) // Smooth height changes
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight)
                 
                 GridOverlay()
                     .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
                     .allowsHitTesting(false)
             }
         }
-        .ignoresSafeArea()
+        .edgesIgnoringSafeArea(.all)
         .allowsHitTesting(false)
     }
 }
-
 
 struct GridOverlay: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()
         let spacing: CGFloat = 50
         
-        // Vertical lines
         for x in stride(from: 0, through: rect.width, by: spacing) {
             path.move(to: CGPoint(x: x, y: 0))
             path.addLine(to: CGPoint(x: x, y: rect.height))
         }
         
-        // Horizontal lines
         for y in stride(from: 0, through: rect.height, by: spacing) {
             path.move(to: CGPoint(x: 0, y: y))
             path.addLine(to: CGPoint(x: rect.width, y: y))
@@ -57,7 +54,6 @@ struct GridOverlay: Shape {
     }
 }
 
-// Global mouse tracking that works across the entire screen
 class GlobalMouseTracker: ObservableObject {
     @Published var mouseY: CGFloat = 400
     private var globalMonitor: Any?
@@ -67,12 +63,9 @@ class GlobalMouseTracker: ObservableObject {
     }
     
     func startTracking() {
-        // Monitor mouse movements globally (even when app isn't focused)
         globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
             let screenHeight = NSScreen.main?.frame.height ?? 1080
             let mouseLocation = NSEvent.mouseLocation
-            
-            // Convert to SwiftUI coordinates (flip Y axis)
             let flippedY = screenHeight - mouseLocation.y
             
             DispatchQueue.main.async {
@@ -80,7 +73,6 @@ class GlobalMouseTracker: ObservableObject {
             }
         }
         
-        // Also monitor when the app is focused
         NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
             let screenHeight = NSScreen.main?.frame.height ?? 1080
             let mouseLocation = NSEvent.mouseLocation
@@ -100,3 +92,115 @@ class GlobalMouseTracker: ObservableObject {
     }
 }
 
+struct FocusModeView: View {
+    @ObservedObject var appDelegate: AppDelegate
+    
+    var body: some View {
+        ZStack {
+            Color.black.edgesIgnoringSafeArea(.all)
+            
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        print("❌ Close button clicked")
+                        appDelegate.toggleFocusMode()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.5))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding()
+                }
+                
+                Spacer()
+                
+                VStack(spacing: 20) {
+                    Text("Write a focused message")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundColor(.white.opacity(0.4))
+                    
+                    SimpleTextView(text: $appDelegate.focusText)
+                        .frame(width: 700, height: 450)
+                }
+                
+                Spacer()
+            }
+        }
+        .onAppear {
+            print("🟢 FocusModeView appeared")
+        }
+    }
+}
+
+struct SimpleTextView: NSViewRepresentable {
+    @Binding var text: String
+
+    func makeNSView(context: Context) -> NSScrollView {
+        let textView = NSTextView()
+        textView.delegate = context.coordinator
+        textView.backgroundColor = .black           // Black background
+        textView.textColor = .white                 // White text
+        textView.insertionPointColor = .white       // White cursor
+        textView.font = .monospacedSystemFont(ofSize: 16, weight: .regular)
+        textView.usesAdaptiveColorMappingForDarkAppearance = false
+        textView.isRichText = false
+        textView.allowsUndo = true
+        textView.isHorizontallyResizable = false
+        textView.isVerticallyResizable = true
+        textView.autoresizingMask = [.width]
+
+        let paragraphStyle = NSMutableParagraphStyle()
+        paragraphStyle.lineSpacing = 4
+
+        let attrs: [NSAttributedString.Key: Any] = [
+            .foregroundColor: NSColor.white,
+            .font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 16, weight: .regular),
+            .paragraphStyle: paragraphStyle
+        ]
+        textView.typingAttributes = attrs
+
+        // Initialize text
+        textView.string = text
+
+        // Wrap in scroll view
+        let scrollView = NSScrollView()
+        scrollView.documentView = textView
+        scrollView.hasVerticalScroller = true
+        scrollView.autohidesScrollers = true
+        scrollView.drawsBackground = true
+        scrollView.backgroundColor = textView.backgroundColor
+        scrollView.wantsLayer = true
+        scrollView.layer?.cornerRadius = 6
+        scrollView.layer?.backgroundColor = textView.backgroundColor.cgColor
+
+        // Ensure textView is focused
+        DispatchQueue.main.async {
+            textView.window?.makeFirstResponder(textView)
+        }
+
+        return scrollView
+    }
+
+    func updateNSView(_ scrollView: NSScrollView, context: Context) {
+        guard let textView = scrollView.documentView as? NSTextView else { return }
+        if textView.string != text {
+            let selectedRange = textView.selectedRange()
+            textView.string = text
+            textView.setSelectedRange(selectedRange)
+        }
+    }
+
+    func makeCoordinator() -> Coordinator { Coordinator(self) }
+
+    class Coordinator: NSObject, NSTextViewDelegate {
+        var parent: SimpleTextView
+        init(_ parent: SimpleTextView) { self.parent = parent }
+
+        func textDidChange(_ notification: Notification) {
+            guard let textView = notification.object as? NSTextView else { return }
+            parent.text = textView.string
+        }
+    }
+}
