@@ -53,9 +53,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         toggleMenuItem?.keyEquivalentModifierMask = .option
         menu.addItem(toggleMenuItem!)
         
-        focusMenuItem = NSMenuItem(title: "Focus on Message (⌥M)", action: #selector(toggleFocusMode), keyEquivalent: "m")
-        focusMenuItem?.keyEquivalentModifierMask = .option
-        menu.addItem(focusMenuItem!)
+        heightToggleMenuItem = NSMenuItem(title: "Normal Height ✓", action: #selector(toggleHeight), keyEquivalent: "")
+        menu.addItem(heightToggleMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -65,9 +64,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         
-        heightToggleMenuItem = NSMenuItem(title: "Normal Height ✓", action: #selector(toggleHeight), keyEquivalent: "")
-        menu.addItem(heightToggleMenuItem!)
         
+        focusMenuItem = NSMenuItem(title: "Focus on Message (⌥M)", action: #selector(toggleFocusMode), keyEquivalent: "m")
+        focusMenuItem?.keyEquivalentModifierMask = .option
+        menu.addItem(focusMenuItem!)
         menu.addItem(NSMenuItem.separator())
         
         let breatheOutItem = NSMenuItem(title: "breathe out", action: nil, keyEquivalent: "")
