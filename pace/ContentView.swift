@@ -8,8 +8,9 @@ struct OverlayContentView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
+                // Make background very opaque and remove the grid overlay
                 Rectangle()
-                    .fill(Color.black.opacity(0.95))
+                    .fill(Color.black.opacity(0.99))
                     .mask(
                         Rectangle()
                             .overlay(
@@ -25,9 +26,7 @@ struct OverlayContentView: View {
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseY)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight)
                 
-                GridOverlay()
-                    .stroke(Color.white.opacity(0.05), lineWidth: 0.5)
-                    .allowsHitTesting(false)
+                // GridOverlay removed
             }
         }
         .edgesIgnoringSafeArea(.all)
@@ -57,34 +56,35 @@ struct GridOverlay: Shape {
 class GlobalMouseTracker: ObservableObject {
     @Published var mouseY: CGFloat = 400
     private var globalMonitor: Any?
-    
+
     init() {
         startTracking()
     }
-    
+
     func startTracking() {
-        globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            let screenHeight = NSScreen.main?.frame.height ?? 1080
-            let mouseLocation = NSEvent.mouseLocation
-            let flippedY = screenHeight - mouseLocation.y
-            
-            DispatchQueue.main.async {
-                self?.mouseY = flippedY
-            }
+        // Remove any existing monitor first
+        if let m = globalMonitor {
+            NSEvent.removeMonitor(m)
+            globalMonitor = nil
         }
-        
-        NSEvent.addLocalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-            let screenHeight = NSScreen.main?.frame.height ?? 1080
-            let mouseLocation = NSEvent.mouseLocation
-            let flippedY = screenHeight - mouseLocation.y
-            
-            DispatchQueue.main.async {
-                self?.mouseY = flippedY
+
+        // Use only the global monitor (receives events regardless of app active state)
+        DispatchQueue.main.async {
+            self.globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
+                guard let self = self else { return }
+                let screenHeight = NSScreen.main?.frame.height ?? 1080
+                let mouseLocation = NSEvent.mouseLocation
+                let flippedY = screenHeight - mouseLocation.y
+
+                DispatchQueue.main.async {
+                    withAnimation(.easeOut(duration: 0.12)) {
+                        self.mouseY = flippedY
+                    }
+                }
             }
-            return event
         }
     }
-    
+
     deinit {
         if let monitor = globalMonitor {
             NSEvent.removeMonitor(monitor)
@@ -106,12 +106,15 @@ struct FocusModeView: View {
                         print("❌ Close button clicked")
                         appDelegate.toggleFocusMode()
                     }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white.opacity(0.5))
+                        // Use a small white 'x' letter instead of the system icon
+                        Text("x")
+                            .font(.system(size: 14, weight: .semibold))
+                            .foregroundColor(.white)
+                            .frame(width: 28, height: 28, alignment: .center)
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .padding()
+                    .padding(.top, 12)
+                    .padding(.trailing, 12)
                 }
                 
                 Spacer()

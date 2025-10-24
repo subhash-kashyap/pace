@@ -21,6 +21,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var focusMenuItem: NSMenuItem?
     private var heightToggleMenuItem: NSMenuItem?
     
+    // Track whether the overlay was visible before entering focus mode
+    private var prevOverlayWasVisible: Bool = false
+
     @Published var bandHeight: CGFloat = 200
     @Published var isDoubleHeight: Bool = false
     @Published var focusText: String = ""
@@ -53,24 +56,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         toggleMenuItem?.keyEquivalentModifierMask = .option
         menu.addItem(toggleMenuItem!)
         
-        heightToggleMenuItem = NSMenuItem(title: "Normal Height ✓", action: #selector(toggleHeight), keyEquivalent: "")
+        heightToggleMenuItem = NSMenuItem(title: "Small Focus Window", action: #selector(toggleHeight), keyEquivalent: "")
         menu.addItem(heightToggleMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
         
-        let breatheInItem = NSMenuItem(title: "breathe in", action: nil, keyEquivalent: "")
-        breatheInItem.isEnabled = false
-        menu.addItem(breatheInItem)
         
-        menu.addItem(NSMenuItem.separator())
-        
-        
-        focusMenuItem = NSMenuItem(title: "Focus on Message (⌥M)", action: #selector(toggleFocusMode), keyEquivalent: "m")
+        focusMenuItem = NSMenuItem(title: "Focus Message (⌥M)", action: #selector(toggleFocusMode), keyEquivalent: "m")
         focusMenuItem?.keyEquivalentModifierMask = .option
         menu.addItem(focusMenuItem!)
         menu.addItem(NSMenuItem.separator())
         
-        let breatheOutItem = NSMenuItem(title: "breathe out", action: nil, keyEquivalent: "")
+        let breatheOutItem = NSMenuItem(title: "Breathe in - Breathe out, repeat", action: nil, keyEquivalent: "")
         breatheOutItem.isEnabled = false
         menu.addItem(breatheOutItem)
         
@@ -88,7 +85,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func updateHeightMenuText() {
-        heightToggleMenuItem?.title = isDoubleHeight ? "Normal Window" : "Big Window"
+        heightToggleMenuItem?.title = isDoubleHeight ? "Small Focus Window" : "Big Focus Window"
     }
     
     func setupGlobalShortcuts() {
@@ -148,30 +145,40 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     @objc func toggleFocusMode() {
-    guard let focusWindow = focusWindow else {
-        print("⚠️ focusWindow is nil!")
-        return
-    }
-    
-    if isFocusModeActive {
-        print("❌ Hiding focus mode")
-        focusWindow.orderOut(nil)
-        isFocusModeActive = false
-    } else {
-        print("✅ Showing focus mode")
-        if overlayWindow?.isVisible == true {
-            overlayWindow?.orderOut(nil)
-            updateMenuState(overlayVisible: false)
+        guard let focusWindow = focusWindow else {
+            print("⚠️ focusWindow is nil!")
+            return
         }
-        focusWindow.orderFront(nil)
-        focusWindow.makeKey()
-        NSApp.activate(ignoringOtherApps: true)
-        print("🎯 Window level: \(focusWindow.level.rawValue)")
-        print("🎯 Is key window: \(focusWindow.isKeyWindow)")
-        print("🎯 First responder: \(focusWindow.firstResponder.debugDescription)")
-        isFocusModeActive = true
+
+        if isFocusModeActive {
+            print("❌ Hiding focus mode")
+            focusWindow.orderOut(nil)
+            isFocusModeActive = false
+
+            // Restore overlay if it was visible before entering focus mode
+            if prevOverlayWasVisible {
+                overlayWindow?.orderFront(nil)
+                updateMenuState(overlayVisible: true)
+            }
+        } else {
+            print("✅ Showing focus mode")
+
+            // remember whether overlay is visible so we can restore it on close
+            prevOverlayWasVisible = (overlayWindow?.isVisible == true)
+
+            if overlayWindow?.isVisible == true {
+                overlayWindow?.orderOut(nil)
+                updateMenuState(overlayVisible: false)
+            }
+            focusWindow.orderFront(nil)
+            focusWindow.makeKey()
+            NSApp.activate(ignoringOtherApps: true)
+            print("🎯 Window level: \(focusWindow.level.rawValue)")
+            print("🎯 Is key window: \(focusWindow.isKeyWindow)")
+            print("🎯 First responder: \(focusWindow.firstResponder.debugDescription)")
+            isFocusModeActive = true
+        }
     }
-}
     
     @objc func quitApp() {
         if let monitor = globalKeyMonitor {
@@ -198,7 +205,8 @@ class OverlayWindow: NSWindow {
             defer: false
         )
         
-        self.level = .floating
+        // Put overlay above the Dock and menubar
+        self.level = .screenSaver
         self.backgroundColor = .clear
         self.isOpaque = false
         self.hasShadow = false
@@ -213,6 +221,9 @@ class OverlayWindow: NSWindow {
 }
 
 class FocusWindow: NSWindow {
+    // keep a weak reference to the app delegate so the window can signal ESC
+    weak var appDelegate: AppDelegate?
+    
     convenience init(appDelegate: AppDelegate) {
         let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
         
@@ -222,6 +233,8 @@ class FocusWindow: NSWindow {
             backing: .buffered,
             defer: false
         )
+        
+        self.appDelegate = appDelegate
         
         self.level = .statusBar
         self.backgroundColor = .black
@@ -241,5 +254,15 @@ class FocusWindow: NSWindow {
     
     override var canBecomeMain: Bool {
         return true
+    }
+    
+    // Close focus mode when the user presses ESC
+    override func keyDown(with event: NSEvent) {
+        // 53 is the keyCode for ESC
+        if event.keyCode == 53 {
+            appDelegate?.toggleFocusMode()
+        } else {
+            super.keyDown(with: event)
+        }
     }
 }
