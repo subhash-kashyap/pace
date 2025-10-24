@@ -31,6 +31,10 @@ struct OverlayContentView: View {
         }
         .edgesIgnoringSafeArea(.all)
         .allowsHitTesting(false)
+        .onAppear {
+            mouseTracker.restartTracking()
+            NSApp.activate(ignoringOtherApps: true) // ensures global events fire immediately
+        }
     }
 }
 
@@ -83,6 +87,14 @@ class GlobalMouseTracker: ObservableObject {
                 }
             }
         }
+    }
+
+    func restartTracking() {
+        if let monitor = globalMonitor {
+            NSEvent.removeMonitor(monitor)
+            globalMonitor = nil
+        }
+        startTracking()
     }
 
     deinit {

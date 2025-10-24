@@ -159,6 +159,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             if prevOverlayWasVisible {
                 overlayWindow?.orderFront(nil)
                 updateMenuState(overlayVisible: true)
+                NSApp.activate(ignoringOtherApps: true)       // 🪄 Reactivate app
             }
         } else {
             print("✅ Showing focus mode")
