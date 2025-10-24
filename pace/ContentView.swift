@@ -106,15 +106,12 @@ struct FocusModeView: View {
                         print("❌ Close button clicked")
                         appDelegate.toggleFocusMode()
                     }) {
-                        // Use a small white 'x' letter instead of the system icon
-                        Text("x")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundColor(.white)
-                            .frame(width: 28, height: 28, alignment: .center)
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.white.opacity(0.5))
                     }
                     .buttonStyle(PlainButtonStyle())
-                    .padding(.top, 12)
-                    .padding(.trailing, 12)
+                    .padding()
                 }
                 
                 Spacer()
