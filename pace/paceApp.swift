@@ -16,7 +16,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
     var statusItem: NSStatusItem?
-    private var globalKeyMonitor: Any?
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var heightToggleMenuItem: NSMenuItem?
@@ -38,7 +37,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         focusWindow = FocusWindow(appDelegate: self)
         
-        setupGlobalShortcuts()
         updateMenuState(overlayVisible: true)
     }
     
@@ -52,18 +50,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         let menu = NSMenu()
         
-        toggleMenuItem = NSMenuItem(title: "Pace View (⌥P)", action: #selector(toggleOverlay), keyEquivalent: "p")
-        toggleMenuItem?.keyEquivalentModifierMask = .option
+        toggleMenuItem = NSMenuItem(title: "Hide Pace View", action: #selector(toggleOverlay), keyEquivalent: "")
         menu.addItem(toggleMenuItem!)
         
         heightToggleMenuItem = NSMenuItem(title: "Small Focus Window", action: #selector(toggleHeight), keyEquivalent: "")
         menu.addItem(heightToggleMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
-        
-        
-        focusMenuItem = NSMenuItem(title: "Focus Message (⌥M)", action: #selector(toggleFocusMode), keyEquivalent: "m")
-        focusMenuItem?.keyEquivalentModifierMask = .option
+        focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
         menu.addItem(focusMenuItem!)
         menu.addItem(NSMenuItem.separator())
         
@@ -88,41 +82,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         heightToggleMenuItem?.title = isDoubleHeight ? "Small Focus Window" : "Big Focus Window"
     }
     
-    func setupGlobalShortcuts() {
-        globalKeyMonitor = NSEvent.addGlobalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.modifierFlags.contains(.option) && event.keyCode == 35 {
-                DispatchQueue.main.async {
-                    self?.toggleOverlay()
-                }
-            } else if event.modifierFlags.contains(.option) && event.keyCode == 46 {
-                DispatchQueue.main.async {
-                    self?.toggleFocusMode()
-                }
-            }
-        }
-        
-        NSEvent.addLocalMonitorForEvents(matching: .keyDown) { [weak self] event in
-            if event.modifierFlags.contains(.option) && event.keyCode == 35 {
-                DispatchQueue.main.async {
-                    self?.toggleOverlay()
-                }
-                return nil
-            } else if event.modifierFlags.contains(.option) && event.keyCode == 46 {
-                DispatchQueue.main.async {
-                    self?.toggleFocusMode()
-                }
-                return nil
-            }
-            return event
-        }
-    }
-    
     func updateMenuState(overlayVisible: Bool) {
         if overlayVisible {
-            toggleMenuItem?.title = "Normal View (⌥P)"
+            toggleMenuItem?.title = "Hide Pace View"
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.on.fill", accessibilityDescription: "Pace On")
         } else {
-            toggleMenuItem?.title = "Pace View (⌥P)"
+            toggleMenuItem?.title = "Show Pace View"
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.off.fill", accessibilityDescription: "Pace Off")
         }
         updateHeightMenuText()
@@ -154,6 +119,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             print("❌ Hiding focus mode")
             focusWindow.orderOut(nil)
             isFocusModeActive = false
+            focusMenuItem?.title = "Show Focus Message"
 
             // Restore overlay if it was visible before entering focus mode
             if prevOverlayWasVisible {
@@ -178,20 +144,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             print("🎯 Is key window: \(focusWindow.isKeyWindow)")
             print("🎯 First responder: \(focusWindow.firstResponder.debugDescription)")
             isFocusModeActive = true
+            focusMenuItem?.title = "Hide Focus Message"
         }
     }
     
     @objc func quitApp() {
-        if let monitor = globalKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
         NSApplication.shared.terminate(nil)
-    }
-    
-    deinit {
-        if let monitor = globalKeyMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
     }
 }
 

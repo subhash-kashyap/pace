@@ -57,50 +57,53 @@ struct GridOverlay: Shape {
     }
 }
 
+// Poll the cursor instead of using a global monitor so we do not require accessibility permissions.
 class GlobalMouseTracker: ObservableObject {
     @Published var mouseY: CGFloat = 400
-    private var globalMonitor: Any?
+    private var timer: Timer?
+    private let updateInterval: TimeInterval = 1.0 / 60.0
 
     init() {
         startTracking()
     }
 
     func startTracking() {
-        // Remove any existing monitor first
-        if let m = globalMonitor {
-            NSEvent.removeMonitor(m)
-            globalMonitor = nil
-        }
+        stopTracking()
 
-        // Use only the global monitor (receives events regardless of app active state)
-        DispatchQueue.main.async {
-            self.globalMonitor = NSEvent.addGlobalMonitorForEvents(matching: .mouseMoved) { [weak self] event in
-                guard let self = self else { return }
-                let screenHeight = NSScreen.main?.frame.height ?? 1080
-                let mouseLocation = NSEvent.mouseLocation
-                let flippedY = screenHeight - mouseLocation.y
+        let timer = Timer(timeInterval: updateInterval, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
 
-                DispatchQueue.main.async {
-                    withAnimation(.easeOut(duration: 0.12)) {
-                        self.mouseY = flippedY
-                    }
-                }
+            let mouseLocation = NSEvent.mouseLocation
+            let screen = NSScreen.screens.first { $0.frame.contains(mouseLocation) }
+            let screenFrame = screen?.frame ?? NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+            let flippedY = screenFrame.maxY - mouseLocation.y
+
+            if abs(self.mouseY - flippedY) < 0.5 {
+                return
+            }
+
+            withAnimation(.easeOut(duration: 0.12)) {
+                self.mouseY = flippedY
             }
         }
+
+        timer.tolerance = updateInterval / 2.0
+        RunLoop.main.add(timer, forMode: .common)
+        RunLoop.main.add(timer, forMode: .eventTracking)
+        self.timer = timer
     }
 
     func restartTracking() {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-            globalMonitor = nil
-        }
         startTracking()
     }
 
     deinit {
-        if let monitor = globalMonitor {
-            NSEvent.removeMonitor(monitor)
-        }
+        stopTracking()
+    }
+
+    private func stopTracking() {
+        timer?.invalidate()
+        timer = nil
     }
 }
 
