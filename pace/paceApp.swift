@@ -18,7 +18,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var statusItem: NSStatusItem?
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
-    private var heightToggleMenuItem: NSMenuItem?
+    private var focusModeMenuItems: [NSMenuItem] = []
     
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
@@ -27,9 +27,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var isDoubleHeight: Bool = false
     @Published var focusText: String = ""
     @Published var isFocusModeActive: Bool = false
+    @Published var focusConfiguration: FocusConfiguration = FocusConfiguration.current
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        
+        // Load saved configuration
+        focusConfiguration = FocusConfiguration.current
+        bandHeight = focusConfiguration.bandHeight
+        isDoubleHeight = bandHeight > 200
+        
         setupMenuBar()
         
         overlayWindow = OverlayWindow(appDelegate: self)
@@ -53,8 +60,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         toggleMenuItem = NSMenuItem(title: "Hide Pace View", action: #selector(toggleOverlay), keyEquivalent: "")
         menu.addItem(toggleMenuItem!)
         
-        heightToggleMenuItem = NSMenuItem(title: "Small Focus Window", action: #selector(toggleHeight), keyEquivalent: "")
-        menu.addItem(heightToggleMenuItem!)
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add focus mode options directly to main menu
+        focusModeMenuItems.removeAll()
+        for mode in FocusMode.allCases {
+            let menuItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
+            menuItem.representedObject = mode
+            menuItem.state = (mode == focusConfiguration.mode) ? .on : .off
+            focusModeMenuItems.append(menuItem)
+            menu.addItem(menuItem)
+        }
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
@@ -72,14 +88,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         statusItem?.menu = menu
     }
     
-    @objc func toggleHeight() {
-        isDoubleHeight.toggle()
-        bandHeight = isDoubleHeight ? 400 : 200
-        updateHeightMenuText()
+    @objc func selectFocusMode(_ sender: NSMenuItem) {
+        guard let mode = sender.representedObject as? FocusMode else { return }
+        
+        focusConfiguration.mode = mode
+        
+        // Update band height based on mode
+        if mode == .smallWindow {
+            focusConfiguration.bandHeight = 200
+            bandHeight = 200
+            isDoubleHeight = false
+        } else if mode == .bigWindow {
+            focusConfiguration.bandHeight = 400
+            bandHeight = 400
+            isDoubleHeight = true
+        }
+        
+        // Save configuration
+        FocusConfiguration.current = focusConfiguration
+        
+        // Update menu checkmarks
+        updateFocusModeMenu()
     }
     
-    func updateHeightMenuText() {
-        heightToggleMenuItem?.title = isDoubleHeight ? "Small Focus Window" : "Big Focus Window"
+    func updateFocusModeMenu() {
+        for item in focusModeMenuItems {
+            if let mode = item.representedObject as? FocusMode {
+                item.state = (mode == focusConfiguration.mode) ? .on : .off
+            }
+        }
     }
     
     func updateMenuState(overlayVisible: Bool) {
@@ -90,7 +127,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             toggleMenuItem?.title = "Show Pace View"
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.off.fill", accessibilityDescription: "Pace Off")
         }
-        updateHeightMenuText()
     }
     
     @objc func toggleOverlay() {
