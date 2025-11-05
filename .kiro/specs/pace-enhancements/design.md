@@ -1,310 +1,240 @@
-# Design Document
+# Design Document: Flash Mode
 
 ## Overview
 
-This design document outlines the architecture and implementation approach for enhancing the Pace macOS reading focus tool with three major features: square focus window mode, persistent notes functionality, and AI-powered text clarification. The design maintains the existing overlay-based architecture while adding new UI components, keyboard shortcuts, context menu integration, and external API connectivity.
+Flash Mode adds a timer-based visual notification system to Pace. It displays a pulsing blue border around the screen every 25 minutes to remind users to take breaks. The feature integrates with the existing menu bar system and runs independently of other Pace modes.
 
 ## Architecture
 
-### High-Level Architecture
-
-The enhanced Pace app will maintain its current SwiftUI + AppKit hybrid architecture with the following additions:
+### Component Structure
 
 ```
-PaceApp (SwiftUI App)
-├── AppDelegate (NSApplicationDelegate)
-│   ├── OverlayWindow (NSWindow)
-│   │   └── OverlayContentView (SwiftUI)
-│   │       ├── FocusAreaView (New - handles different focus shapes)
-│   │       ├── NotesFooterView (New - toggleable notes)
-│   │       └── ClarificationFooterView (New - AI responses)
-│   ├── FocusWindow (existing)
-│   ├── NotesManager (New - persistence)
-│   ├── OpenAIService (New - API integration)
-│   └── ContextMenuManager (New - system integration)
+AppDelegate (existing)
+├── flashWindow: FlashWindow? (new)
+├── flashMenuItem: NSMenuItem? (new)
+├── flashTimer: Timer? (new)
+└── isFlashModeActive: Bool (new)
+
+FlashWindow (new)
+└── contentView: FlashBorderView
+
+FlashBorderView (new)
+└── SwiftUI view with border animation
 ```
 
-### Key Architectural Decisions
+### Integration Points
 
-1. **Focus Shape Abstraction**: Create a protocol-based system for different focus shapes (horizontal band, square) to allow easy extension
-2. **Footer Component Stack**: Implement a vertical stack system for multiple footer components that can appear/disappear independently
-3. **Persistent Storage**: Use UserDefaults for notes content and focus mode preferences for simplicity
-4. **Context Menu Integration**: Leverage NSServicesMenu for system-wide text selection integration
-5. **Async API Handling**: Use Swift's async/await pattern for OpenAI API calls with proper error handling
+- **Menu Bar**: Add Flash Mode toggle item to existing tray menu in `setupMenuBar()`
+- **Window Management**: FlashWindow operates independently alongside OverlayWindow and FocusWindow
+- **Timer Management**: 25-minute timer managed by AppDelegate
+- **Lifecycle**: Flash mode state persists only during app session (no UserDefaults needed)
 
 ## Components and Interfaces
 
-### 1. Focus Shape System
+### 1. AppDelegate Extensions
+
+Add to existing AppDelegate class:
 
 ```swift
-protocol FocusShape {
-    func createMask(in rect: CGRect, at position: CGPoint) -> Path
-    var displayName: String { get }
-}
+// Properties
+var flashWindow: FlashWindow?
+private var flashMenuItem: NSMenuItem?
+private var flashTimer: Timer?
+@Published var isFlashModeActive: Bool = false
 
-enum FocusMode: String, CaseIterable {
-    case horizontalBand = "horizontal"
-    case smallWindow = "small"
-    case bigWindow = "big" 
-    case square = "square"
+// Methods
+@objc func toggleFlashMode()
+func startFlashTimer()
+func cancelFlashTimer()
+func showFlashBorder()
+```
+
+**Responsibilities:**
+- Toggle Flash Mode on/off
+- Manage 25-minute timer lifecycle
+- Trigger flash border display
+- Update menu item state
+
+### 2. FlashWindow (new class)
+
+```swift
+class FlashWindow: NSWindow {
+    convenience init()
 }
 ```
 
-**Implementation Details:**
-- `HorizontalBandShape`: Current implementation
-- `SquareShape`: New 30% width × 50% height square following mouse
-- `WindowShape`: Existing small/big window implementations
-- Focus shapes will be selectable via menu and persist user preference
+**Configuration:**
+- Window level: `.screenSaver` (same as OverlayWindow)
+- Style: borderless, full screen
+- Behavior: ignores mouse events, transparent background
+- Collection behavior: `.canJoinAllSpaces`, `.fullScreenAuxiliary`
 
-### 2. Footer Component System
+**Responsibilities:**
+- Host FlashBorderView
+- Remain hidden until triggered
+- Show/hide on demand
+
+### 3. FlashBorderView (new SwiftUI view)
 
 ```swift
-struct FooterStackView: View {
-    @ObservedObject var appDelegate: AppDelegate
-    
-    var body: some View {
-        VStack(spacing: 8) {
-            if appDelegate.showClarificationFooter {
-                ClarificationFooterView(appDelegate: appDelegate)
-            }
-            if appDelegate.showNotesFooter {
-                NotesFooterView(appDelegate: appDelegate)
-            }
-        }
-        .position(appDelegate.footerPosition)
-    }
+struct FlashBorderView: View {
+    @State private var opacity: Double = 0.0
+    @State private var pulseCount: Int = 0
+    var onComplete: () -> Void
 }
 ```
 
-**Smart Footer Positioning:**
-- Position calculated dynamically based on current focus area location
-- When focus area is in top half: footers appear 60px below focus area
-- When focus area is in bottom half: footers appear 60px + footer height above focus area
-- Both footers centered horizontally at calculated position
-- Clarification footer stacks above notes footer when both visible
-- 8pt spacing between footers
-- Position updates only when notes footer is toggled, not during mouse movement
+**Visual Specifications:**
+- Border color: Blue (`.blue` or custom RGB)
+- Border width: 8-12 points (start with 10pt)
+- Border style: Inset stroke on all four edges
+- Animation: 10 pulses over 5 seconds (0.5s per pulse)
 
-### 3. Notes Management
+**Animation Logic:**
+- Pulse: opacity 0.0 → 0.8 → 0.0 (ease in/out)
+- Duration: 5 seconds total
+- Callback: `onComplete()` when animation finishes
 
-```swift
-class NotesManager: ObservableObject {
-    @Published var notesContent: String = ""
-    @Published var isNotesVisible: Bool = false
-    
-    private let userDefaults = UserDefaults.standard
-    private let notesKey = "PaceNotesContent"
-    
-    func loadNotes()
-    func saveNotes()
-    func toggleNotesVisibility(currentFocusPosition: CGPoint, screenBounds: CGRect) -> CGPoint
-    func calculateFooterPosition(focusPosition: CGPoint, screenBounds: CGRect) -> CGPoint
-}
-```
-
-**Storage Strategy:**
-- Use UserDefaults for immediate persistence
-- Auto-save on text changes with 0.5 second debounce
-- Load notes content on app launch
-
-**Smart Positioning Strategy:**
-- Calculate footer position based on current focus area location when toggled
-- Disable mouse tracking for focus area when notes are visible
-- Re-enable mouse tracking when notes are dismissed
-- Return calculated position for footer placement
-
-### 4. OpenAI Integration
-
-```swift
-class OpenAIService: ObservableObject {
-    private let apiKey: String = "YOUR_API_KEY_HERE" // Placeholder
-    private let baseURL = "https://api.openai.com/v1/chat/completions"
-    
-    func clarifyText(_ text: String) async -> Result<String, OpenAIError>
-}
-
-enum OpenAIError: Error {
-    case apiKeyError
-    case networkError
-    case rateLimitError
-    case generalError(String)
-}
-```
-
-**API Integration Details:**
-- Use GPT-4o model for best performance
-- Read prompt template from `clarification-prompt.md` file in app bundle
-- Implement exponential backoff for rate limiting
-- 30-second timeout for requests
-
-**Prompt Template System:**
-- Create `clarification-prompt.md` file containing the system prompt for OpenAI
-- Load prompt content at app startup and cache in memory
-- Allow runtime reloading of prompt file for easy editing during development
-- Template will include placeholder for selected text: `{{SELECTED_TEXT}}`
-- Example prompt structure: "Please provide a clear, concise explanation of the following text: {{SELECTED_TEXT}}"
-
-### 5. Context Menu Integration
-
-```swift
-class ContextMenuManager: NSObject {
-    weak var appDelegate: AppDelegate?
-    
-    func setupServicesMenu()
-    func handleClarifyText(_ pasteboard: NSPasteboard, userData: String, error: AutoreleasingUnsafeMutablePointer<NSString?>)
-}
-```
-
-**System Integration:**
-- Register as macOS service for text selection
-- Only active when Pace overlay is visible
-- Graceful handling when no text selected
+**Responsibilities:**
+- Render blue border on all screen edges
+- Execute pulse animation
+- Notify when animation completes
 
 ## Data Models
 
-### 1. Focus Configuration
+No persistent data models needed. Runtime state only:
 
 ```swift
-struct FocusConfiguration {
-    var mode: FocusMode
-    var bandHeight: CGFloat // For existing modes
-    var squareSize: CGSize // For square mode
-    
-    static var current: FocusConfiguration {
-        get { /* Load from UserDefaults */ }
-        set { /* Save to UserDefaults */ }
+// In AppDelegate
+isFlashModeActive: Bool  // Current mode state
+flashTimer: Timer?       // Active timer reference
+```
+
+## Implementation Details
+
+### Menu Integration
+
+Add Flash Mode item after Focus Mode separator:
+
+```swift
+menu.addItem(NSMenuItem.separator())
+flashMenuItem = NSMenuItem(
+    title: "Flash Mode", 
+    action: #selector(toggleFlashMode), 
+    keyEquivalent: ""
+)
+menu.addItem(flashMenuItem!)
+```
+
+Update checkmark based on `isFlashModeActive`.
+
+### Timer Behavior
+
+```swift
+func startFlashTimer() {
+    cancelFlashTimer()
+    flashTimer = Timer.scheduledTimer(
+        withTimeInterval: 25 * 60,  // 25 minutes
+        repeats: true
+    ) { [weak self] _ in
+        self?.showFlashBorder()
     }
 }
-```
 
-### 2. Footer State
-
-```swift
-struct FooterState {
-    var notesVisible: Bool = false
-    var notesContent: String = ""
-    var clarificationVisible: Bool = false
-    var clarificationContent: String = ""
-    var clarificationLoading: Bool = false
-    var clarificationError: String? = nil
-    var footerPosition: CGPoint = .zero
-    var mouseTrackingEnabled: Bool = true
+func cancelFlashTimer() {
+    flashTimer?.invalidate()
+    flashTimer = nil
 }
 ```
+
+### Flash Trigger Flow
+
+1. User clicks "Flash Mode" menu item
+2. `toggleFlashMode()` called
+3. If activating:
+   - Set `isFlashModeActive = true`
+   - Update menu checkmark
+   - Call `showFlashBorder()` immediately
+   - Call `startFlashTimer()`
+4. If deactivating:
+   - Set `isFlashModeActive = false`
+   - Remove menu checkmark
+   - Call `cancelFlashTimer()`
+
+### Border Display Flow
+
+1. `showFlashBorder()` called
+2. Order FlashWindow front
+3. FlashBorderView starts pulse animation
+4. After 5 seconds, animation completes
+5. Callback hides FlashWindow
+6. Timer continues running (if mode still active)
+
+### Window Layering
+
+All windows use `.screenSaver` level to avoid conflicts:
+- OverlayWindow: `.screenSaver`
+- FocusWindow: `.statusBar`
+- FlashWindow: `.screenSaver` (new)
+
+FlashWindow appears above OverlayWindow due to order, but both ignore mouse events.
 
 ## Error Handling
 
-### OpenAI API Errors
-- **API Key Error**: Display "API key error" in clarification footer
-- **Network/Timeout**: Display "Error, try later" in clarification footer  
-- **Rate Limiting**: Implement exponential backoff, show loading state
-- **Invalid Response**: Log error, show generic error message
+### Timer Edge Cases
 
-### Keyboard Shortcut Conflicts
-- Check for existing Cmd+\ usage in system
-- Provide alternative shortcut if conflict detected
-- Allow user to customize shortcut in future versions
+- **App quit**: Timer automatically invalidated by system
+- **Mode toggled rapidly**: `cancelFlashTimer()` called before creating new timer
+- **Timer fires during animation**: No issue, animations queue naturally
 
-### Context Menu Registration
-- Graceful fallback if services registration fails
-- Log warnings for debugging
-- Continue app functionality without context menu if needed
+### Window Edge Cases
+
+- **No screen available**: Use fallback rect (1920x1080)
+- **Multiple screens**: Use main screen only
+- **Window creation fails**: Graceful degradation (mode activates but no visual)
+
+### Animation Edge Cases
+
+- **Window hidden mid-animation**: Animation completes in background, no issue
+- **Rapid show/hide**: SwiftUI handles state transitions automatically
 
 ## Testing Strategy
 
-### Unit Tests
-- Focus shape calculations and positioning
-- Notes persistence and loading
-- OpenAI service response parsing
-- Error handling for various failure scenarios
-
-### Integration Tests  
-- Keyboard shortcut handling across different focus modes
-- Footer stacking and positioning with different combinations
-- Context menu integration with text selection
-- API integration with mock responses
-
 ### Manual Testing
-- Multi-monitor support for focus shapes and footers
-- Performance with large notes content
-- Context menu behavior across different applications
-- Accessibility compliance for new UI components
 
-## Mouse Tracking Integration
+1. **Activation**: Click Flash Mode, verify immediate flash + checkmark
+2. **Timer**: Wait 25 minutes, verify automatic flash
+3. **Deactivation**: Click Flash Mode again, verify no more flashes
+4. **Animation**: Count 10 pulses over ~5 seconds
+5. **Coexistence**: Enable Flash Mode + other modes, verify no conflicts
+6. **Mouse events**: Verify clicks pass through flash border
 
-### Smart Focus Area Behavior
+### Edge Case Testing
 
-The enhanced notes system introduces intelligent mouse tracking control to improve the note-taking experience:
+1. Toggle Flash Mode on/off rapidly
+2. Quit app while flash is animating
+3. Trigger flash while other windows are visible
+4. Change focus modes while Flash Mode is active
 
-**Tracking States:**
-- **Active Tracking**: Focus area follows mouse cursor in real-time (default behavior)
-- **Locked Position**: Focus area remains stationary at current position (when notes active)
+### Visual Testing
 
-**State Transitions:**
-1. **Notes Activation (Cmd+\)**: 
-   - Capture current mouse/focus position
-   - Calculate optimal footer position based on focus location
-   - Disable mouse tracking for focus area
-   - Display footer at calculated position
-   
-2. **Notes Deactivation (Cmd+\ again)**:
-   - Hide footer immediately
-   - Re-enable mouse tracking for focus area
-   - Focus area resumes following mouse cursor
-
-**Position Calculation Logic:**
-```swift
-func calculateFooterPosition(focusPosition: CGPoint, screenBounds: CGRect) -> CGPoint {
-    let footerHeight: CGFloat = 80 // 3 lines + padding
-    let offset: CGFloat = 60
-    
-    if focusPosition.y < screenBounds.height / 2 {
-        // Focus in top half - position footer below
-        return CGPoint(x: screenBounds.midX, y: focusPosition.y + offset)
-    } else {
-        // Focus in bottom half - position footer above
-        return CGPoint(x: screenBounds.midX, y: focusPosition.y - offset - footerHeight)
-    }
-}
-```
-
-## Implementation Phases
-
-### Phase 1: Focus Shape System
-- Implement focus shape protocol and enum
-- Create square focus shape implementation
-- Add menu options for focus mode selection
-- Implement persistence for focus mode preference
-
-### Phase 2: Notes Footer
-- Create NotesFooterView with proper styling
-- Implement keyboard shortcut handling (Cmd+\)
-- Add NotesManager for persistence
-- Integrate footer into overlay window
-
-### Phase 3: AI Clarification
-- Create `clarification-prompt.md` template file with editable prompt
-- Implement OpenAI service with error handling and prompt loading
-- Create ClarificationFooterView with dismiss button
-- Set up context menu integration
-- Add footer stacking system
-
-### Phase 4: Integration & Polish
-- Ensure all components work together seamlessly
-- Performance optimization for smooth animations
-- Comprehensive error handling and user feedback
-- Documentation and prompt template creation
-
-## Security Considerations
-
-- Store OpenAI API key securely (placeholder for user implementation)
-- Validate and sanitize text sent to OpenAI API
-- Implement request size limits to prevent abuse
-- Log API usage for monitoring and debugging
+1. Verify border appears on all four edges
+2. Verify blue color is visible on various backgrounds
+3. Verify inset stroke appearance
+4. Verify smooth fade in/out transitions
 
 ## Performance Considerations
 
-- Debounce notes auto-save to prevent excessive disk writes
-- Cache OpenAI responses for identical text selections
-- Optimize footer rendering to maintain smooth mouse tracking
-- Lazy loading of context menu registration
+- Timer runs on main thread (standard for UI timers)
+- Animation uses SwiftUI's built-in engine (GPU-accelerated)
+- Window remains in memory but hidden (minimal overhead)
+- No polling or continuous updates when not animating
+
+## Future Enhancements
+
+Potential future additions (not in current scope):
+- Configurable timer interval
+- Configurable border color
+- Configurable pulse count/duration
+- Configurable border width
+- Persistent mode state across app launches

@@ -15,10 +15,14 @@ struct PaceApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
+    var flashWindow: FlashWindow?
     var statusItem: NSStatusItem?
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
+    private var flashMenuItem: NSMenuItem?
     private var focusModeMenuItems: [NSMenuItem] = []
+    private var flashTimer: Timer?
+    private var lastFlashTime: Date?
     
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
@@ -27,6 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @Published var isDoubleHeight: Bool = false
     @Published var focusText: String = ""
     @Published var isFocusModeActive: Bool = false
+    @Published var isFlashModeActive: Bool = false
     @Published var focusConfiguration: FocusConfiguration = FocusConfiguration.current
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
@@ -43,6 +48,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         overlayWindow?.orderFront(nil)
         
         focusWindow = FocusWindow(appDelegate: self)
+        flashWindow = FlashWindow()
         
         updateMenuState(overlayVisible: true)
     }
@@ -75,6 +81,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
         menu.addItem(focusMenuItem!)
+        
+        menu.addItem(NSMenuItem.separator())
+        flashMenuItem = NSMenuItem(title: "Flash", action: #selector(toggleFlashMode), keyEquivalent: "")
+        menu.addItem(flashMenuItem!)
+        
         menu.addItem(NSMenuItem.separator())
         
         let breatheOutItem = NSMenuItem(title: "Breathe in - Breathe out, repeat", action: nil, keyEquivalent: "")
@@ -184,6 +195,78 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
+    @objc func toggleFlashMode() {
+        // Toggle the Flash Mode state
+        isFlashModeActive.toggle()
+        
+        // Update menu item checkmark state
+        flashMenuItem?.state = isFlashModeActive ? .on : .off
+        
+        if isFlashModeActive {
+            // Activating Flash Mode
+            showFlashBorder()
+            startFlashTimer()
+        } else {
+            // Deactivating Flash Mode
+            cancelFlashTimer()
+            // Reset menu title when deactivated
+            flashMenuItem?.title = "Flash"
+        }
+    }
+    
+    func updateFlashMenuTitle() {
+        guard let lastFlash = lastFlashTime else {
+            flashMenuItem?.title = "Flash"
+            return
+        }
+        
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        let timeString = formatter.string(from: lastFlash)
+        flashMenuItem?.title = "Flashed at \(timeString)"
+    }
+    
+    func showFlashBorder() {
+        guard let flashWindow = flashWindow else { return }
+        
+        // Update last flash time
+        lastFlashTime = Date()
+        updateFlashMenuTitle()
+        
+        // Create new FlashBorderView with completion callback
+        let flashView = FlashBorderView(onComplete: { [weak self] in
+            // Hide window after animation completes
+            self?.flashWindow?.orderOut(nil)
+        })
+        
+        // Update window content with new view (to restart animation)
+        flashWindow.contentView = NSHostingView(rootView: flashView)
+        
+        // Order flashWindow to front
+        flashWindow.orderFront(nil)
+    }
+    
+    func startFlashTimer() {
+        // Cancel any existing timer first
+        cancelFlashTimer()
+        
+        // Create Timer with 25-minute interval (25 * 60 seconds)
+        flashTimer = Timer.scheduledTimer(
+            withTimeInterval: 25 * 60,
+            repeats: true
+        ) { [weak self] _ in
+            // Call showFlashBorder in timer callback
+            self?.showFlashBorder()
+        }
+    }
+    
+    func cancelFlashTimer() {
+        // Invalidate timer if it exists
+        flashTimer?.invalidate()
+        // Set flashTimer to nil
+        flashTimer = nil
+    }
+    
     @objc func quitApp() {
         NSApplication.shared.terminate(nil)
     }
@@ -258,6 +341,75 @@ class FocusWindow: NSWindow {
             appDelegate?.toggleFocusMode()
         } else {
             super.keyDown(with: event)
+        }
+    }
+}
+
+class FlashWindow: NSWindow {
+    convenience init() {
+        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        self.init(
+            contentRect: screenRect,
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        // Configure window to be above everything but transparent and non-interactive
+        self.level = .screenSaver
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = false
+        self.ignoresMouseEvents = true
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        
+        self.setFrame(screenRect, display: true)
+        
+        // Initialize with FlashBorderView
+        self.contentView = NSHostingView(rootView: FlashBorderView(onComplete: {}))
+    }
+}
+
+// FlashBorderView - Task 3.1: Structure with state and callback
+struct FlashBorderView: View {
+    @State private var opacity: Double = 0.0
+    @State private var pulseCount: Int = 0
+    var onComplete: () -> Void
+    
+    var body: some View {
+        // Border stroke with gradient from top-left (white) to bottom-right (red)
+        Rectangle()
+            .strokeBorder(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.white, Color.red]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 8
+            )
+            .opacity(opacity)
+            .edgesIgnoringSafeArea(.all)
+            .onAppear {
+                startPulseAnimation()
+            }
+    }
+    
+    // Task 3.3: Implement pulse animation
+    private func startPulseAnimation() {
+        // Reset state
+        opacity = 0.0
+        pulseCount = 0
+        
+        // Create repeating animation: 6 pulses over 3 seconds = 0.5s per pulse
+        // Each pulse is 0.25s fade in + 0.25s fade out
+        withAnimation(.easeInOut(duration: 0.25).repeatCount(12, autoreverses: true)) {
+            opacity = 0.7  // More opaque so it's clearly visible
+        }
+        
+        // Call onComplete after 3 seconds (6 complete pulses)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            onComplete()
         }
     }
 }

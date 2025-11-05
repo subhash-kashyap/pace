@@ -1,52 +1,79 @@
 # Implementation Plan
 
-- [x] 1. Set up focus shape system and square focus mode
+- [x] 1. Add Flash Mode properties to AppDelegate
+  - Add `flashWindow`, `flashMenuItem`, `flashTimer`, and `isFlashModeActive` properties to AppDelegate class
+  - Initialize flashWindow in `applicationDidFinishLaunching`
+  - _Requirements: 1.1, 1.3_
 
-  - Create FocusShape protocol and FocusMode enum for different focus window shapes
-  - Implement SquareShape class that creates 30% width × 50% height square following mouse cursor
-  - Add focus mode selection to menu bar with persistence using UserDefaults
-  - Update OverlayContentView to use new focus shape system instead of hardcoded rectangle
-  - _Requirements: 1.1, 1.2, 1.3, 1.4, 1.5_
+- [x] 2. Create FlashWindow class
+  - [x] 2.1 Implement FlashWindow as NSWindow subclass
+    - Configure window with borderless style, full screen dimensions
+    - Set window level to `.screenSaver`
+    - Configure to ignore mouse events and be transparent
+    - Set collection behavior for all spaces
+    - _Requirements: 3.4, 4.1, 4.4_
+  
+  - [x] 2.2 Initialize FlashWindow with FlashBorderView content
+    - Create NSHostingView with FlashBorderView
+    - Set as window's contentView
+    - _Requirements: 4.1_
 
-- [ ] 2. Implement notes footer with smart positioning and mouse tracking control
+- [x] 3. Create FlashBorderView SwiftUI component
+  - [x] 3.1 Implement FlashBorderView structure
+    - Create SwiftUI view with opacity state
+    - Add pulseCount state tracker
+    - Add onComplete callback parameter
+    - _Requirements: 3.1, 3.2_
+  
+  - [x] 3.2 Implement border rendering
+    - Use Rectangle with stroke modifier for all four edges
+    - Apply blue color
+    - Use inset stroke style with 10pt width
+    - Make view fill entire screen with edgesIgnoringSafeArea
+    - _Requirements: 4.1, 4.2, 4.3_
+  
+  - [x] 3.3 Implement pulse animation
+    - Create repeating animation that pulses opacity from 0.0 to 0.8 and back
+    - Configure to run 10 times over 5 seconds (0.5s per pulse)
+    - Use easeInOut timing curve
+    - Call onComplete callback after 10 pulses
+    - _Requirements: 3.1, 3.2, 3.3_
 
-  - Create NotesManager class for handling notes persistence, visibility state, and position calculation
-  - Implement smart footer positioning logic that places footer 60px below focus area when in top half of screen, or 60px + footer height above focus area when in bottom half
-  - Add mouse tracking disable/enable functionality that locks focus area position when notes are active
-  - Implement NotesFooterView with grey background, white text, 60% screen width, and 3-line height with scrolling
-  - Add Cmd+\ keyboard shortcut handling to toggle notes footer with position calculation and mouse tracking control
-  - Integrate UserDefaults for notes content persistence between app sessions
-  - _Requirements: 2.1, 2.2, 2.3, 2.4, 2.5, 2.6, 2.7, 2.8, 2.9, 2.10, 2.11_
+- [x] 4. Implement Flash Mode menu integration
+  - [x] 4.1 Add Flash Mode menu item
+    - Add flashMenuItem to setupMenuBar after focus mode separator
+    - Set title to "Flash Mode"
+    - Connect to toggleFlashMode action
+    - _Requirements: 1.1_
+  
+  - [x] 4.2 Implement toggleFlashMode method
+    - Toggle isFlashModeActive boolean
+    - Update menu item checkmark state
+    - Call showFlashBorder if activating
+    - Call startFlashTimer if activating
+    - Call cancelFlashTimer if deactivating
+    - _Requirements: 1.1, 1.2, 1.3, 1.5_
 
-- [ ] 3. Create AI clarification system foundation
+- [ ] 5. Implement timer management
+  - [x] 5.1 Implement startFlashTimer method
+    - Cancel any existing timer first
+    - Create Timer with 25-minute interval (25 * 60 seconds)
+    - Set repeats to true
+    - Call showFlashBorder in timer callback
+    - _Requirements: 1.3, 2.1, 2.2_
+  
+  - [x] 5.2 Implement cancelFlashTimer method
+    - Invalidate timer if it exists
+    - Set flashTimer to nil
+    - _Requirements: 1.5, 2.3, 2.4_
+  
+  - [x] 5.3 Implement showFlashBorder method
+    - Order flashWindow to front
+    - Trigger FlashBorderView animation
+    - Hide window after animation completes via callback
+    - _Requirements: 1.2, 2.2, 3.3_
 
-  - Create clarification-prompt.md template file with editable OpenAI prompt including {{SELECTED_TEXT}} placeholder
-  - Implement OpenAIService class with GPT-4o integration and proper error handling for API key, network, and rate limit errors
-  - Create ClarificationFooterView with loading states, error messages, and subtle dismiss button
-  - Add prompt template loading system that reads from clarification-prompt.md file
-  - _Requirements: 3.3, 3.4, 3.5, 3.8, 3.9, 3.10_
-
-- [ ] 4. Implement context menu integration
-
-  - Create ContextMenuManager class to register "Clarify with Pace" as macOS system service
-  - Add text selection detection and context menu option that is greyed out when no text is selected
-  - Integrate context menu with OpenAI service to send selected text and display response in clarification footer
-  - Ensure context menu only works when Pace overlay is active and in overlay mode only
-  - _Requirements: 3.1, 3.2, 3.11_
-
-- [ ] 5. Create footer stacking system with smart positioning
-
-  - Implement FooterStackView that uses calculated position from NotesManager instead of fixed bottom positioning
-  - Position clarification footer above notes footer when both are visible using smart positioning logic
-  - Add proper spacing (8pt between footers) and center alignment at calculated position
-  - Ensure both footers can be visible simultaneously without overlap and respect mouse tracking lock state
-  - Update overlay window to integrate footer stack at dynamically calculated position
-  - _Requirements: 3.6, 4.2, 4.3_
-
-- [ ] 6. Integration and final polish
-  - Update menu system to include new focus mode options while preserving existing functionality
-  - Ensure all keyboard shortcuts work correctly without conflicts with existing app features
-  - Verify notes and clarification features work only in overlay mode, not in focus message mode
-  - Add proper error handling and user feedback for all new features
-  - Test multi-monitor support and performance with new components
-  - _Requirements: 4.1, 4.4, 4.5_
+- [x] 6. Wire up animation completion
+  - Implement callback in FlashBorderView that hides FlashWindow after animation
+  - Ensure window is properly hidden after 5 seconds
+  - _Requirements: 3.3_
