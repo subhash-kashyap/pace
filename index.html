@@ -169,6 +169,115 @@
         font-size:14px; color:var(--muted); cursor:pointer; text-decoration:underline;
       }
 
+      /* Modal */
+      .waitlist-modal{
+        position:fixed; inset:0; z-index:100;
+        display:none; align-items:center; justify-content:center;
+      }
+      .waitlist-modal.is-visible{ display:flex; }
+      .waitlist-modal::before{
+        content:""; position:absolute; inset:0;
+        background:rgba(5,10,25,0.6);
+        backdrop-filter:blur(14px);
+      }
+      .modal-card{
+        position:relative; z-index:1;
+        width:min(420px, calc(100% - 32px));
+        padding:32px 28px 28px;
+        border-radius:28px;
+        background:white;
+        border:1px solid rgba(143,176,255,0.32);
+        box-shadow:0 32px 60px rgba(3,8,26,0.55);
+        color:var(--fg);
+      }
+      .modal-close{
+        position:absolute; top:16px; right:16px;
+        border:none; background:rgba(255,255,255,0.04);
+        border-radius:50%; width:34px; height:34px;
+        color:var(--muted); display:flex; align-items:center; justify-content:center;
+        cursor:pointer; transition:background .2s ease, color .2s ease;
+      }
+      .modal-close:hover{ background:rgba(143,176,255,0.18); color:var(--fg); }
+      .modal-card h2{
+        margin:0 0 6px;
+        font-size:24px;
+        letter-spacing:-0.01em;
+      }
+      .modal-card p{
+        margin:0 0 20px;
+        color:color-mix(in srgb, var(--muted) 80%, var(--fg) 20%);
+        font-size:15px;
+      }
+      .newsletter-form{
+        display:flex; flex-direction:column; gap:16px;
+      }
+      .newsletter-form label{
+        font-size:13px; font-weight:600; letter-spacing:0.02em;
+        color:color-mix(in srgb, var(--muted) 60%, var(--fg) 40%);
+      }
+      .newsletter-form-input{
+        width:100%; padding:12px 16px;
+        border-radius:14px; border:1px solid rgba(143,176,255,0.28);
+        background:rgba(255, 255, 255, 0.65);
+        color:var(--fg);
+        font:16px/1.2 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        box-shadow:inset 0 1px 0 rgba(255,255,255,0.05);
+      }
+      .newsletter-form-input::placeholder{
+        color:color-mix(in srgb, var(--muted) 70%, var(--fg) 30%);
+      }
+      .newsletter-form-button,
+      .newsletter-loading-button{
+        border:none; border-radius:999px;
+        padding:12px 18px;
+        font:600 15px/1 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        display:inline-flex; align-items:center; justify-content:center;
+        cursor:pointer;
+        transition:transform .15s ease, box-shadow .15s ease, background .2s ease;
+        background:linear-gradient(120deg,var(--accent),var(--accent-strong));
+        color:#0b0b0b;
+        box-shadow:0 18px 30px rgba(118,185,255,0.25);
+      }
+      .newsletter-form-button:hover{ transform:translateY(-1px); }
+      .newsletter-loading-button{
+        display:none;
+      }
+      .newsletter-success{
+        display:none; gap:12px; align-items:center; margin-top:12px;
+        font-size:14px; color:#8bf5b3;
+      }
+      .newsletter-error{
+        display:none; gap:12px; align-items:center; margin-top:12px;
+        font-size:14px; color:#ff8890;
+      }
+      .newsletter-success-icon{
+        width:28px; height:28px; border-radius:50%;
+        background:rgba(139,245,179,0.16);
+        border:1px solid rgba(139,245,179,0.5);
+        display:inline-flex; align-items:center; justify-content:center;
+        font-size:16px;
+      }
+      .newsletter-back-button{
+        margin:18px auto 0; display:none;
+        background:transparent; border:none; color:color-mix(in srgb, var(--muted) 70%, var(--fg) 30%);
+        font:500 14px/1.2 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        cursor:pointer;
+      }
+      .newsletter-back-button:hover{ text-decoration:underline; }
+      .whatsapp-button{
+        border:none; border-radius:999px;
+        padding:12px 18px;
+        font:600 15px/1 "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        display:inline-flex; align-items:center; justify-content:center; gap:8px;
+        cursor:pointer;
+        transition:transform .15s ease, background .2s ease;
+        background:#25D366;
+        color:white;
+        text-decoration:none;
+        width:100%;
+      }
+      .whatsapp-button:hover{ transform:translateY(-1px); background:#20BA5A; }
+
       /* Media strip */
       .strip{
         margin:48px auto 12px; display:grid; gap:16px;
@@ -192,11 +301,17 @@
       }
 
       /* Features */
-      .features{ margin:64px auto 0; }
+      .features{ 
+        margin:64px 0 0; 
+        padding:0 32px;
+        max-width:100%;
+      }
       .features h2{ text-align:center; margin-bottom:32px; font-size:clamp(24px,4vw,32px); }
       .features-grid{
-        display:grid; gap:32px; align-items:center;
-        grid-template-columns:1fr 1fr;
+        display:grid; gap:48px; align-items:center;
+        grid-template-columns:1.2fr 1fr;
+        max-width:1400px;
+        margin:0 auto;
       }
       @media (max-width:768px){ .features-grid{ grid-template-columns:1fr; } }
       .features-media{
@@ -304,7 +419,7 @@
       <div class="container nav">
         <nav class="nav-shell" aria-label="Primary">
           <a class="logo">Pace <span style="color: #464e55;">your</span> ADHD</a>
-          <a class="nav-download" href="#download">
+          <a class="nav-download" href="#waitlist" data-open-waitlist>
             <svg viewBox="0 0 20 20" fill="currentColor" aria-hidden="true">
               <path d="M10 1.75a.75.75 0 0 1 .75.75v8.19l2.22-2.22a.75.75 0 1 1 1.06 1.06l-3.5 3.5a.75.75 0 0 1-1.06 0l-3.5-3.5a.75.75 0 1 1 1.06-1.06L9.25 10.7V2.5A.75.75 0 0 1 10 1.75ZM4 14.5a.75.75 0 0 0 0 1.5h12a.75.75 0 0 0 0-1.5H4Z"/>
             </svg>
@@ -332,24 +447,24 @@
     </section>
 
     <!-- Features -->
-    <section class="container features">
+    <section class="features">
       <h2>More features on Pace</h2>
       <div class="features-grid">
         <div class="features-media">
-          <img src="PaceDemoVid.gif" alt="Additional Pace features demonstration" />
+          <img src="PaceMoreFeatures.gif" alt="Additional Pace features demonstration" />
         </div>
         <ul class="features-list">
           <li>
             <strong>Three Focus Modes</strong>
-            <p>Choose between small window, big window, or square spotlight. For the right speed and file formats</p>
-          </li>
-          <li>
-            <strong>Flash Reminders</strong>
-            <p>Its a very subtle all border flash that comes every 25 minutes. I use it to recenter myself, check posture, breathe and get back to focus.</p>
+            <p>Choose between small window, big window, or square spotlight. For the right reading speed and file formats</p>
           </li>
           <li>
             <strong>Distraction-Free Writing</strong>
             <p>Write your thoughts, messages and notes without going to a different app Or just use it as a black screen</p>
+          </li>
+          <li>
+            <strong>Flash Reminders</strong>
+            <p>Its a very subtle all border flash that comes every 25 minutes. I use it to recenter myself, check posture, breathe and get back to focus.</p>
           </li>
         </ul>
       </div>
@@ -397,8 +512,41 @@
     </section>
 
 
+    <!-- Waitlist Modal -->
+    <div class="waitlist-modal" id="waitlistModal" aria-hidden="true">
+      <div class="modal-card" role="dialog" aria-modal="true" aria-labelledby="waitlistModalTitle">
+        <button type="button" class="modal-close" aria-label="Close waitlist popup">&times;</button>
+        <div class="newsletter-form-container">
+          <h2 id="waitlistModalTitle">Join the waitlist</h2>
+          <p>Last few bugs left. Drop your email and I'll let you know when Pace is ready.</p>
+          <form class="newsletter-form" action="https://app.loops.so/api/newsletter-form/clsllez6m01sqdni7leepj038" method="POST">
+            <input class="newsletter-form-input" id="waitlistEmail" name="email" type="email" placeholder="your@email.com" required autocomplete="email" />
+            <button type="submit" class="newsletter-form-button">Join waitlist</button>
+            <button type="button" class="newsletter-loading-button" disabled>Submitting…</button>
+          </form>
+          <div class="newsletter-success" role="status" aria-live="polite">
+            <span class="newsletter-success-icon">✓</span>
+            <div>
+              <p style="margin:0 0 12px;">Got it. Will send you an email soon, look out.</p>
+              <p>In the meantime, join my whatsapp group, it has a few people</p>
+              <a href="https://chat.whatsapp.com/Djy4dst0wyTAvPpMuapJd5" target="_blank" class="whatsapp-button">
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
+                  <path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413Z"/>
+                </svg>
+                Join WhatsApp Group
+              </a>
+            </div>
+          </div>
+          <div class="newsletter-error" role="alert">
+            <p class="newsletter-error-message">Oops! Something went wrong, please try again.</p>
+          </div>
+          <button class="newsletter-back-button" type="button">&larr; Back</button>
+        </div>
+      </div>
+    </div>
+
     <!-- Footer -->
-    <footer>
+    <footer></footer>
       <p>hello@paceyouradhd.com</p>
       <a href="/privacy.html">Privacy</a> ·
       <a href="/terms.html">Terms</a> ·
@@ -406,8 +554,121 @@
       <p><a href="https://kiriakakis.net/comics/mused/a-day-at-the-park">source of the article used</a></p>
     </footer>
 
-    <!-- Mixpanel -->
+    <!-- Waitlist Modal Script -->
     <script>
+      (function () {
+        const modal = document.getElementById("waitlistModal");
+        if (!modal) return;
+
+        const openers = document.querySelectorAll("[data-open-waitlist]");
+        const closeButton = modal.querySelector(".modal-close");
+        const input = modal.querySelector(".newsletter-form-input");
+        const form = modal.querySelector(".newsletter-form");
+        const submitButton = modal.querySelector(".newsletter-form-button");
+        const loadingButton = modal.querySelector(".newsletter-loading-button");
+        const success = modal.querySelector(".newsletter-success");
+        const errorContainer = modal.querySelector(".newsletter-error");
+        const errorMessage = modal.querySelector(".newsletter-error-message");
+        const backButton = modal.querySelector(".newsletter-back-button");
+        const initialErrorCopy = (errorMessage && errorMessage.textContent) || "Oops! Something went wrong, please try again.";
+        let lastFocused = null;
+
+        function resetModalState() {
+          if (form) form.reset();
+          if (success) success.style.display = "none";
+          if (errorContainer) errorContainer.style.display = "none";
+          if (errorMessage) errorMessage.textContent = initialErrorCopy;
+          if (submitButton) submitButton.style.display = "inline-flex";
+          if (loadingButton) loadingButton.style.display = "none";
+          if (input) input.style.display = "";
+          if (backButton) backButton.style.display = "none";
+        }
+
+        function openModal() {
+          lastFocused = document.activeElement;
+          resetModalState();
+          modal.classList.add("is-visible");
+          modal.setAttribute("aria-hidden", "false");
+          document.body.style.overflow = "hidden";
+          setTimeout(() => input?.focus({ preventScroll: true }), 80);
+        }
+
+        function closeModal() {
+          modal.classList.remove("is-visible");
+          modal.setAttribute("aria-hidden", "true");
+          document.body.style.overflow = "";
+          if (lastFocused && typeof lastFocused.focus === "function") {
+            lastFocused.focus();
+          }
+        }
+
+        openers.forEach((btn) => {
+          btn.addEventListener("click", (event) => {
+            event.preventDefault();
+            openModal();
+          });
+        });
+
+        closeButton?.addEventListener("click", closeModal);
+        modal.addEventListener("click", (event) => {
+          if (event.target === modal) closeModal();
+        });
+        document.addEventListener("keydown", (event) => {
+          if (event.key === "Escape" && modal.classList.contains("is-visible")) {
+            closeModal();
+          }
+        });
+
+        form?.addEventListener("submit", async (event) => {
+          event.preventDefault();
+          if (!form || !input || !submitButton || !loadingButton) return;
+
+          submitButton.style.display = "none";
+          loadingButton.style.display = "inline-flex";
+
+          const formBody = "userGroup=&mailingLists=&email=" + encodeURIComponent(input.value);
+
+          try {
+            const res = await fetch(form.action, {
+              method: "POST",
+              body: formBody,
+              headers: { "Content-Type": "application/x-www-form-urlencoded" },
+            });
+
+            if (res.ok) {
+              if (success) success.style.display = "flex";
+              if (input) input.style.display = "none";
+              if (backButton) backButton.style.display = "block";
+              form.reset();
+              
+              // Track success
+              if (window.mixpanel && mixpanel.track) {
+                mixpanel.track("waitlist_joined");
+              }
+            } else {
+              const data = await res.json();
+              if (errorContainer) errorContainer.style.display = "flex";
+              if (errorMessage) errorMessage.textContent = data.message || res.statusText || initialErrorCopy;
+              if (backButton) backButton.style.display = "block";
+            }
+          } catch (error) {
+            if (errorContainer) errorContainer.style.display = "flex";
+            if (error.message && errorMessage) errorMessage.textContent = error.message;
+            if (backButton) backButton.style.display = "block";
+          } finally {
+            if (loadingButton) loadingButton.style.display = "none";
+          }
+        });
+
+        backButton?.addEventListener("click", () => {
+          resetModalState();
+          input?.focus({ preventScroll: true });
+        });
+      })();
+    </script>
+
+    <!-- Mixpanel -->
+    <script></script>
       (function (f, b) {
         if (!b.__SV) {
           var e, g, i, h;

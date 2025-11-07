@@ -1,0 +1,13 @@
+# Vercel
+.vercel
+
+# macOS
+.DS_Store
+
+# Xcode
+*.xcodeproj
+*.xcworkspace
+pace/
+paceTests/
+paceUITests/
+.vscode/
