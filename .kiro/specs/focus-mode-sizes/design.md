@@ -2,7 +2,7 @@
 
 ## Overview
 
-This enhancement refactors the focus mode system from 4 discrete modes (Small Window, Big Window, Square, Circle) into a more flexible 3-mode × 3-size matrix. Users select a focus shape (Rectangle, Square, Circle) and independently adjust its size (S, M, L), providing 9 total combinations while simplifying the menu structure.
+This enhancement refactors the focus mode system from 4 discrete modes (Small Window, Big Window, Square, Circle) into a more flexible 4-mode × 3-size matrix. Users select a focus shape (Rectangle, Center Column, Square, Circle) and independently adjust its size (S, M, L), providing 12 total combinations while simplifying the menu structure.
 
 ## Architecture
 
@@ -18,6 +18,7 @@ FocusConfiguration
 
 FocusMode enum
 ├── rectangle
+├── centerColumn
 ├── square
 └── circle
 
@@ -28,6 +29,7 @@ FocusSize enum
 
 FocusShape protocol implementations
 ├── RectangleShape (replaces WindowShape + HorizontalBandShape)
+├── CenterColumnShape (new - centered 70% width bar)
 ├── SquareShape (updated to use calculated size)
 └── CircleShape (updated to use calculated diameter)
 ```
@@ -77,7 +79,7 @@ enum FocusMode: String, CaseIterable {
     var displayName: String {
         switch self {
         case .rectangle: return "Rectangle"
-        case .square: return "Square Focus"
+        case .square: return "Square"
         case .circle: return "James Bond"
         }
     }
@@ -87,6 +89,7 @@ enum FocusMode: String, CaseIterable {
 **Changes:**
 - Removed: `smallWindow`, `bigWindow`
 - Added: `rectangle` (consolidates both window modes)
+- Added: `centerColumn` (new - for blog/article reading)
 - Kept: `square`, `circle` (renamed from legacy values)
 
 ### FocusConfiguration (Refactored)
@@ -99,6 +102,14 @@ struct FocusConfiguration {
     // Calculated properties
     var rectangleHeight: CGFloat {
         baseRectangleHeight * size.multiplier
+    }
+    
+    var centerColumnSize: CGSize {
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        return CGSize(
+            width: screenSize.width * 0.7,  // 70% of screen width
+            height: baseRectangleHeight * size.multiplier
+        )
     }
     
     var squareSize: CGSize {
@@ -117,7 +128,8 @@ struct FocusConfiguration {
 ```
 
 **Base Dimensions:**
-- Rectangle: 200pt height
+- Rectangle: 200pt height, full screen width
+- Center Column: 200pt height, 70% screen width (centered)
 - Square: 30% screen width × 50% screen height
 - Circle: 50% screen height diameter
 
@@ -133,14 +145,15 @@ struct FocusConfiguration {
 ```
 - Small Window ✓
 - Big Window
-- Square Focus
+- Square
 - James Bond
 ```
 
 **After:**
 ```
 - Rectangle ✓
-- Square Focus
+- Center Column
+- Square
 - James Bond
 ---
 - Size ▶
@@ -239,6 +252,24 @@ struct RectangleShape: FocusShape {
 }
 ```
 
+**CenterColumnShape (new):**
+```swift
+struct CenterColumnShape: FocusShape {
+    let size: CGSize
+    
+    func createMask(in rect: CGRect, at position: CGPoint) -> Path {
+        var path = Path()
+        path.addRect(CGRect(
+            x: (rect.width - size.width) / 2,  // Center horizontally
+            y: position.y - size.height / 2,
+            width: size.width,
+            height: size.height
+        ))
+        return path
+    }
+}
+```
+
 **SquareShape (updated):**
 - Now receives calculated `size` from `focusConfiguration.squareSize`
 - No longer calculates dimensions internally
@@ -255,6 +286,8 @@ private var currentFocusShape: any FocusShape {
     switch config.mode {
     case .rectangle:
         return RectangleShape(height: config.rectangleHeight)
+    case .centerColumn:
+        return CenterColumnShape(size: config.centerColumnSize)
     case .square:
         return SquareShape(size: config.squareSize)
     case .circle:
@@ -274,9 +307,14 @@ Removed: `.animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight)`
 ## Size Calculation Examples
 
 ### Rectangle Mode
-- **S:** 200pt × 1.0 = 200pt height
-- **M:** 200pt × 1.5 = 300pt height
-- **L:** 200pt × 2.25 = 450pt height
+- **S:** 200pt × 1.0 = 200pt height (full width)
+- **M:** 200pt × 1.5 = 300pt height (full width)
+- **L:** 200pt × 2.25 = 450pt height (full width)
+
+### Center Column Mode (on 1920×1080 screen)
+- **S:** 1344×200 (70% width × 200pt height)
+- **M:** 1344×300 (70% width × 300pt height)
+- **L:** 1344×450 (70% width × 450pt height)
 
 ### Square Mode (on 1920×1080 screen)
 - **S:** 576×540 (30% × 50% of screen)
@@ -316,7 +354,7 @@ private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
 ### Manual Testing
 
 1. **Mode Selection:**
-   - Select each mode (Rectangle, Square, Circle)
+   - Select each mode (Rectangle, Center Column, Square, Circle)
    - Verify checkmark appears on selected mode
    - Verify overlay updates immediately
 
@@ -339,16 +377,21 @@ private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
 ### Visual Verification
 
 1. **Rectangle Sizes:**
-   - S: Narrow horizontal bar
-   - M: Medium horizontal bar (1.5× taller)
-   - L: Wide horizontal bar (2.25× taller)
+   - S: Narrow horizontal bar (full width)
+   - M: Medium horizontal bar (1.5× taller, full width)
+   - L: Wide horizontal bar (2.25× taller, full width)
 
-2. **Square Sizes:**
+2. **Center Column Sizes:**
+   - S: Narrow centered bar (70% width)
+   - M: Medium centered bar (1.5× taller, 70% width)
+   - L: Wide centered bar (2.25× taller, 70% width)
+
+3. **Square Sizes:**
    - S: Moderate rectangle following cursor
    - M: Larger rectangle (1.5× dimensions)
    - L: Very large rectangle (2.25× dimensions)
 
-3. **Circle Sizes:**
+4. **Circle Sizes:**
    - S: Moderate circle following cursor
    - M: Larger circle (1.5× diameter)
    - L: Very large circle (2.25× diameter)

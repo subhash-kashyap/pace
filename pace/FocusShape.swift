@@ -27,6 +27,7 @@ enum FocusSize: String, CaseIterable {
 // MARK: - Focus Mode Enum
 enum FocusMode: String, CaseIterable {
     case rectangle = "rectangle"
+    case centerColumn = "centerColumn"
     case square = "square"
     case circle = "circle"
     
@@ -34,8 +35,10 @@ enum FocusMode: String, CaseIterable {
         switch self {
         case .rectangle:
             return "Rectangle"
+        case .centerColumn:
+            return "Center Column"
         case .square:
-            return "Square Focus"
+            return "Square"
         case .circle:
             return "James Bond"
         }
@@ -96,6 +99,14 @@ struct FocusConfiguration {
         Self.baseRectangleHeight * size.multiplier
     }
     
+    var centerColumnSize: CGSize {
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        return CGSize(
+            width: screenSize.width * 0.7,  // 70% of screen width
+            height: Self.baseRectangleHeight * size.multiplier
+        )
+    }
+    
     var squareSize: CGSize {
         let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
         return CGSize(
@@ -132,7 +143,7 @@ struct HorizontalBandShape: FocusShape {
 struct SquareShape: FocusShape {
     let size: CGSize
     
-    var displayName: String { "Square Focus" }
+    var displayName: String { "Square" }
     
     func createMask(in rect: CGRect, at position: CGPoint) -> Path {
         var path = Path()
@@ -159,6 +170,24 @@ struct RectangleShape: FocusShape {
             y: position.y - height / 2,
             width: rect.width,
             height: height
+        ))
+        return path
+    }
+}
+
+// MARK: - Center Column Shape
+struct CenterColumnShape: FocusShape {
+    let size: CGSize
+    
+    var displayName: String { "Center Column" }
+    
+    func createMask(in rect: CGRect, at position: CGPoint) -> Path {
+        var path = Path()
+        path.addRect(CGRect(
+            x: (rect.width - size.width) / 2,  // Center horizontally
+            y: position.y - size.height / 2,
+            width: size.width,
+            height: size.height
         ))
         return path
     }

@@ -10,6 +10,8 @@ struct OverlayContentView: View {
         switch config.mode {
         case .rectangle:
             return RectangleShape(height: config.rectangleHeight)
+        case .centerColumn:
+            return CenterColumnShape(size: config.centerColumnSize)
         case .square:
             return SquareShape(size: config.squareSize)
         case .circle:
@@ -31,6 +33,7 @@ struct OverlayContentView: View {
                                     if appDelegate.focusConfiguration.mode == .square || appDelegate.focusConfiguration.mode == .circle {
                                         mousePosition = CGPoint(x: mouseTracker.mouseX, y: mouseTracker.mouseY)
                                     } else {
+                                        // Rectangle and Center Column follow mouse vertically only
                                         mousePosition = CGPoint(x: geo.size.width / 2, y: mouseTracker.mouseY)
                                     }
                                     

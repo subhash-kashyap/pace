@@ -2,13 +2,14 @@
 
 ## Introduction
 
-This enhancement consolidates the focus mode options from 4 separate modes (Small Window, Big Window, Square, Circle) into 3 focus shapes (Rectangle, Square, Circle) with 3 configurable sizes (S, M, L) each, providing a cleaner and more flexible user experience.
+This enhancement consolidates the focus mode options from 4 separate modes (Small Window, Big Window, Square, Circle) into 4 focus shapes (Rectangle, Center Column, Square, Circle) with 3 configurable sizes (S, M, L) each, providing a cleaner and more flexible user experience.
 
 ## Glossary
 
-- **Focus Mode**: The shape of the reading focus area (Rectangle, Square, or Circle)
+- **Focus Mode**: The shape of the reading focus area (Rectangle, Center Column, Square, or Circle)
 - **Focus Size**: The size multiplier for the focus area (S, M, or L)
 - **Rectangle Mode**: Horizontal bar focus that spans the full screen width
+- **Center Column Mode**: Horizontal bar focus at 70% screen width, centered horizontally
 - **Square Mode**: Rectangular focus area that follows the mouse cursor
 - **Circle Mode**: Circular focus area that follows the mouse cursor (aka "James Bond")
 - **Size Multiplier**: The scaling factor applied to base dimensions (1.0x, 1.5x, 2.25x)
@@ -17,11 +18,11 @@ This enhancement consolidates the focus mode options from 4 separate modes (Smal
 
 ### Requirement 1: Consolidated Focus Modes
 
-**User Story:** As a user, I want to choose from 3 distinct focus shapes instead of 4 overlapping options, so that the menu is cleaner and more intuitive
+**User Story:** As a user, I want to choose from 4 distinct focus shapes instead of 4 overlapping options, so that the menu is cleaner and more intuitive
 
 #### Acceptance Criteria
 
-1. WHEN the user opens the tray menu, THE Pace Application SHALL display 3 focus mode options: Rectangle, Square, and Circle
+1. WHEN the user opens the tray menu, THE Pace Application SHALL display 4 focus mode options: Rectangle, Center Column, Square, and Circle
 2. WHEN the user selects a focus mode, THE Pace Application SHALL show a checkmark next to the selected mode
 3. WHEN the user switches modes, THE Pace Application SHALL update the overlay immediately
 4. WHEN the application starts, THE Pace Application SHALL load the previously selected mode from UserDefaults
@@ -48,8 +49,9 @@ This enhancement consolidates the focus mode options from 4 separate modes (Smal
 2. WHEN size is set to M, THE Pace Application SHALL use a 1.5x multiplier
 3. WHEN size is set to L, THE Pace Application SHALL use a 2.25x multiplier (1.5 × 1.5)
 4. WHEN calculating Rectangle height, THE Pace Application SHALL multiply base height (200pt) by the size multiplier
-5. WHEN calculating Square dimensions, THE Pace Application SHALL multiply base dimensions (30% width × 50% height) by the size multiplier
-6. WHEN calculating Circle diameter, THE Pace Application SHALL multiply base diameter (50% screen height) by the size multiplier
+5. WHEN calculating Center Column dimensions, THE Pace Application SHALL use 70% screen width and multiply base height (200pt) by the size multiplier
+6. WHEN calculating Square dimensions, THE Pace Application SHALL multiply base dimensions (30% width × 50% height) by the size multiplier
+7. WHEN calculating Circle diameter, THE Pace Application SHALL multiply base diameter (50% screen height) by the size multiplier
 
 ### Requirement 4: Legacy Migration
 
