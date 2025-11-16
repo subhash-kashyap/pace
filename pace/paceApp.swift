@@ -20,15 +20,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var flashMenuItem: NSMenuItem?
-    private var focusModeMenuItems: [NSMenuItem] = []
+    private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
+    private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
     private var flashTimer: Timer?
     private var lastFlashTime: Date?
     
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
 
-    @Published var bandHeight: CGFloat = 200
-    @Published var isDoubleHeight: Bool = false
     @Published var focusText: String = ""
     @Published var isFocusModeActive: Bool = false
     @Published var isFlashModeActive: Bool = false
@@ -39,8 +38,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Load saved configuration
         focusConfiguration = FocusConfiguration.current
-        bandHeight = focusConfiguration.bandHeight
-        isDoubleHeight = bandHeight > 200
         
         setupMenuBar()
         
@@ -68,15 +65,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Add focus mode options directly to main menu
+        // Add focus mode options with size submenus
         focusModeMenuItems.removeAll()
         for mode in FocusMode.allCases {
-            let menuItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
-            menuItem.representedObject = mode
-            menuItem.state = (mode == focusConfiguration.mode) ? .on : .off
-            focusModeMenuItems.append(menuItem)
-            menu.addItem(menuItem)
+            let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
+            modeItem.representedObject = mode
+            modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
+            focusModeMenuItems[mode] = modeItem
+            menu.addItem(modeItem)
         }
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add size selector submenu
+        let sizeMenu = NSMenu()
+        focusSizeMenuItems.removeAll()
+        for size in FocusSize.allCases {
+            let sizeItem = NSMenuItem(title: size.displayName, action: #selector(selectFocusSize(_:)), keyEquivalent: "")
+            sizeItem.representedObject = size
+            sizeItem.state = (size == focusConfiguration.size) ? .on : .off
+            focusSizeMenuItems[size] = sizeItem
+            sizeMenu.addItem(sizeItem)
+        }
+        
+        let sizeMenuItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        sizeMenuItem.submenu = sizeMenu
+        menu.addItem(sizeMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
@@ -103,30 +117,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         guard let mode = sender.representedObject as? FocusMode else { return }
         
         focusConfiguration.mode = mode
-        
-        // Update band height based on mode
-        if mode == .smallWindow {
-            focusConfiguration.bandHeight = 200
-            bandHeight = 200
-            isDoubleHeight = false
-        } else if mode == .bigWindow {
-            focusConfiguration.bandHeight = 400
-            bandHeight = 400
-            isDoubleHeight = true
-        }
-        
-        // Save configuration
         FocusConfiguration.current = focusConfiguration
         
-        // Update menu checkmarks
         updateFocusModeMenu()
     }
     
+    @objc func selectFocusSize(_ sender: NSMenuItem) {
+        guard let size = sender.representedObject as? FocusSize else { return }
+        
+        focusConfiguration.size = size
+        FocusConfiguration.current = focusConfiguration
+        
+        updateFocusSizeMenu()
+    }
+    
     func updateFocusModeMenu() {
-        for item in focusModeMenuItems {
-            if let mode = item.representedObject as? FocusMode {
-                item.state = (mode == focusConfiguration.mode) ? .on : .off
-            }
+        for (mode, item) in focusModeMenuItems {
+            item.state = (mode == focusConfiguration.mode) ? .on : .off
+        }
+    }
+    
+    func updateFocusSizeMenu() {
+        for (size, item) in focusSizeMenuItems {
+            item.state = (size == focusConfiguration.size) ? .on : .off
         }
     }
     

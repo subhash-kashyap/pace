@@ -6,15 +6,14 @@ struct OverlayContentView: View {
     @ObservedObject var appDelegate: AppDelegate
     
     private var currentFocusShape: any FocusShape {
-        switch appDelegate.focusConfiguration.mode {
-        case .smallWindow:
-            return WindowShape(height: 200)
-        case .bigWindow:
-            return WindowShape(height: 400)
+        let config = appDelegate.focusConfiguration
+        switch config.mode {
+        case .rectangle:
+            return RectangleShape(height: config.rectangleHeight)
         case .square:
-            return SquareShape(size: appDelegate.focusConfiguration.squareSize)
+            return SquareShape(size: config.squareSize)
         case .circle:
-            return CircleShape(diameter: 500)
+            return CircleShape(diameter: config.circleDiameter)
         }
     }
     
@@ -46,8 +45,8 @@ struct OverlayContentView: View {
                     )
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseY)
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseX)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.bandHeight)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.mode)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.size)
                 
                 // GridOverlay removed
             }

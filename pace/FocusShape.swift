@@ -7,19 +7,33 @@ protocol FocusShape {
     var displayName: String { get }
 }
 
+// MARK: - Focus Size Enum
+enum FocusSize: String, CaseIterable {
+    case small = "S"
+    case medium = "M"
+    case large = "L"
+    
+    var displayName: String { rawValue }
+    
+    var multiplier: CGFloat {
+        switch self {
+        case .small: return 1.0
+        case .medium: return 1.5
+        case .large: return 2.25  // 1.5 * 1.5
+        }
+    }
+}
+
 // MARK: - Focus Mode Enum
 enum FocusMode: String, CaseIterable {
-    case smallWindow = "small"
-    case bigWindow = "big"
+    case rectangle = "rectangle"
     case square = "square"
     case circle = "circle"
     
     var displayName: String {
         switch self {
-        case .smallWindow:
-            return "Small Window"
-        case .bigWindow:
-            return "Big Window"
+        case .rectangle:
+            return "Rectangle"
         case .square:
             return "Square Focus"
         case .circle:
@@ -31,36 +45,68 @@ enum FocusMode: String, CaseIterable {
 // MARK: - Focus Configuration
 struct FocusConfiguration {
     var mode: FocusMode
-    var bandHeight: CGFloat
-    var squareSize: CGSize
+    var size: FocusSize
     
     private static let userDefaults = UserDefaults.standard
     private static let focusModeKey = "PaceFocusMode"
-    private static let bandHeightKey = "PaceBandHeight"
+    private static let focusSizeKey = "PaceFocusSize"
+    private static let legacyBandHeightKey = "PaceBandHeight"
+    
+    // Base dimensions (for small size)
+    private static let baseRectangleHeight: CGFloat = 200
+    private static let baseSquareWidthRatio: CGFloat = 0.3
+    private static let baseSquareHeightRatio: CGFloat = 0.5
     
     static var current: FocusConfiguration {
         get {
-            let modeString = userDefaults.string(forKey: focusModeKey) ?? FocusMode.smallWindow.rawValue
-            let mode = FocusMode(rawValue: modeString) ?? .smallWindow
-            let bandHeight = userDefaults.object(forKey: bandHeightKey) as? CGFloat ?? 200
+            let modeString = userDefaults.string(forKey: focusModeKey) ?? ""
+            let sizeString = userDefaults.string(forKey: focusSizeKey) ?? FocusSize.small.rawValue
             
-            // Calculate square size as 30% width × 50% height of main screen
-            let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
-            let squareSize = CGSize(
-                width: screenSize.width * 0.3,
-                height: screenSize.height * 0.5
-            )
+            // Migration: convert old modes to new system
+            var mode: FocusMode
+            var size: FocusSize = FocusSize(rawValue: sizeString) ?? .small
             
-            return FocusConfiguration(
-                mode: mode,
-                bandHeight: bandHeight,
-                squareSize: squareSize
-            )
+            if let legacyMode = modeString.isEmpty ? nil : FocusMode(rawValue: modeString) {
+                mode = legacyMode
+            } else {
+                // Handle legacy modes
+                switch modeString {
+                case "small":
+                    mode = .rectangle
+                    size = .small
+                case "big":
+                    mode = .rectangle
+                    size = .medium
+                default:
+                    mode = .rectangle
+                    size = .small
+                }
+            }
+            
+            return FocusConfiguration(mode: mode, size: size)
         }
         set {
             userDefaults.set(newValue.mode.rawValue, forKey: focusModeKey)
-            userDefaults.set(newValue.bandHeight, forKey: bandHeightKey)
+            userDefaults.set(newValue.size.rawValue, forKey: focusSizeKey)
         }
+    }
+    
+    // Calculated properties based on mode and size
+    var rectangleHeight: CGFloat {
+        Self.baseRectangleHeight * size.multiplier
+    }
+    
+    var squareSize: CGSize {
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        return CGSize(
+            width: screenSize.width * Self.baseSquareWidthRatio * size.multiplier,
+            height: screenSize.height * Self.baseSquareHeightRatio * size.multiplier
+        )
+    }
+    
+    var circleDiameter: CGFloat {
+        let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
+        return screenSize.height * Self.baseSquareHeightRatio * size.multiplier
     }
 }
 
@@ -100,11 +146,11 @@ struct SquareShape: FocusShape {
     }
 }
 
-// MARK: - Window Shape (for small/big windows)
-struct WindowShape: FocusShape {
+// MARK: - Rectangle Shape (replaces Window/HorizontalBand)
+struct RectangleShape: FocusShape {
     let height: CGFloat
     
-    var displayName: String { height <= 200 ? "Small Window" : "Big Window" }
+    var displayName: String { "Rectangle" }
     
     func createMask(in rect: CGRect, at position: CGPoint) -> Path {
         var path = Path()
