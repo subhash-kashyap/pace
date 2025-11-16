@@ -13,6 +13,8 @@ struct OverlayContentView: View {
             return WindowShape(height: 400)
         case .square:
             return SquareShape(size: appDelegate.focusConfiguration.squareSize)
+        case .circle:
+            return CircleShape(diameter: 500)
         }
     }
     
@@ -27,7 +29,7 @@ struct OverlayContentView: View {
                             .overlay(
                                 Path { path in
                                     let mousePosition: CGPoint
-                                    if appDelegate.focusConfiguration.mode == .square {
+                                    if appDelegate.focusConfiguration.mode == .square || appDelegate.focusConfiguration.mode == .circle {
                                         mousePosition = CGPoint(x: mouseTracker.mouseX, y: mouseTracker.mouseY)
                                     } else {
                                         mousePosition = CGPoint(x: geo.size.width / 2, y: mouseTracker.mouseY)

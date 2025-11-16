@@ -12,6 +12,7 @@ enum FocusMode: String, CaseIterable {
     case smallWindow = "small"
     case bigWindow = "big"
     case square = "square"
+    case circle = "circle"
     
     var displayName: String {
         switch self {
@@ -21,6 +22,8 @@ enum FocusMode: String, CaseIterable {
             return "Big Window"
         case .square:
             return "Square Focus"
+        case .circle:
+            return "James Bond"
         }
     }
 }
@@ -110,6 +113,24 @@ struct WindowShape: FocusShape {
             y: position.y - height / 2,
             width: rect.width,
             height: height
+        ))
+        return path
+    }
+}
+
+// MARK: - Circle Shape
+struct CircleShape: FocusShape {
+    let diameter: CGFloat
+    
+    var displayName: String { "James Bond" }
+    
+    func createMask(in rect: CGRect, at position: CGPoint) -> Path {
+        var path = Path()
+        path.addEllipse(in: CGRect(
+            x: position.x - diameter / 2,
+            y: position.y - diameter / 2,
+            width: diameter,
+            height: diameter
         ))
         return path
     }
