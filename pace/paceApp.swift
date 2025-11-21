@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 @main
 struct PaceApp: App {
@@ -27,6 +28,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
+    
+    // Sparkle updater
+    private var updaterController: SPUStandardUpdaterController?
 
     @Published var focusText: String = ""
     @Published var isFocusModeActive: Bool = false
@@ -35,6 +39,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        
+        // Initialize Sparkle updater
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
         // Load saved configuration
         focusConfiguration = FocusConfiguration.current
@@ -105,6 +112,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         let breatheOutItem = NSMenuItem(title: "Breathe in - Breathe out, repeat", action: nil, keyEquivalent: "")
         breatheOutItem.isEnabled = false
         menu.addItem(breatheOutItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add Sparkle update menu item
+        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        menu.addItem(checkForUpdatesItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -278,6 +291,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         flashTimer?.invalidate()
         // Set flashTimer to nil
         flashTimer = nil
+    }
+    
+    @objc func checkForUpdates() {
+        updaterController?.checkForUpdates(nil)
     }
     
     @objc func quitApp() {

@@ -11,3 +11,9 @@ pace/
 paceTests/
 paceUITests/
 .vscode/
+
+# Sparkle
+releases/
+*.sparkle_private_key
+*_priv.pem
+dsa_priv.pem
