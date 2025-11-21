@@ -5,14 +5,14 @@ struct FeaturesScreen: View {
         VStack(spacing: 30) {
             Spacer()
             
-            Text("The app is in your top tray, it has:")
+            Text("Pace is in the menubar tray on top of your screen. It has")
                 .font(.system(size: 36, weight: .bold))
                 .foregroundColor(.black)
             
             VStack(alignment: .leading, spacing: 20) {
                 FeatureRow(
                     icon: "rectangle",
-                    title: "4 Modes of Overlay",
+                    title: "4 Modes of Spotlight",
                     description: "Rectangle, Center Column, Square, and Circle"
                 )
                 FeatureRow(
@@ -22,7 +22,7 @@ struct FeaturesScreen: View {
                 )
                 FeatureRow(
                     icon: "timer",
-                    title: "Flash",
+                    title: "Flash blinker",
                     description: "Every 25-minutes screen boundary flashs. I use it to breathe out."
                 )
             }
@@ -34,7 +34,7 @@ struct FeaturesScreen: View {
             HStack(spacing: 10) {
                 Image(systemName: "arrow.up")
                     .foregroundColor(.black.opacity(0.6))
-                Text("Again, everything is in your menubar tray on top, including this.")
+                Text("Again, this app lives in your menubar tray on top, including this.")
                     .font(.system(size: 14))
                     .foregroundColor(.black.opacity(0.6))
             }
