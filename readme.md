@@ -10,6 +10,14 @@ B. Overlay window to help with focus.
 # Insipred by the ADHD Accessibility feature in https://www.ux4g.gov.in/
 ```
 
+## Features
+
+- **Multiple Focus Modes**: Rectangle, Center Column, Square, and Circle (James Bond style)
+- **Adjustable Sizes**: Small, Medium, and Large options for each mode
+- **Focus Message Mode**: Distraction-free writing environment
+- **Flash Mode**: 25-minute Pomodoro timer with visual alerts
+- **Auto-Updates**: Built-in update checker powered by Sparkle
+
 ## Installation
 
 ```bash
@@ -18,5 +26,14 @@ B. Overlay window to help with focus.
 3. open Pace.xcodeproj
 # Open it in Xcode, Build and run in Xcode
 ```
+
+## For Developers
+
+### Setting Up Auto-Updates
+
+If you're forking this project and want to set up automatic updates for your users, see [SPARKLE_SETUP.md](SPARKLE_SETUP.md) for detailed instructions on:
+- Generating signing keys
+- Configuring the appcast feed
+- Publishing releases
 
 ![alt text](image.png)

@@ -1,5 +1,6 @@
 import SwiftUI
 import AppKit
+import Sparkle
 
 @main
 struct PaceApp: App {
@@ -15,27 +16,43 @@ struct PaceApp: App {
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
+    var flashWindow: FlashWindow?
     var statusItem: NSStatusItem?
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
-    private var heightToggleMenuItem: NSMenuItem?
+    private var flashMenuItem: NSMenuItem?
+    private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
+    private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
+    private var flashTimer: Timer?
+    private var lastFlashTime: Date?
     
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
+    
+    // Sparkle updater
+    private var updaterController: SPUStandardUpdaterController?
 
-    @Published var bandHeight: CGFloat = 200
-    @Published var isDoubleHeight: Bool = false
     @Published var focusText: String = ""
     @Published var isFocusModeActive: Bool = false
+    @Published var isFlashModeActive: Bool = false
+    @Published var focusConfiguration: FocusConfiguration = FocusConfiguration.current
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
+        
+        // Initialize Sparkle updater
+        updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
+        
+        // Load saved configuration
+        focusConfiguration = FocusConfiguration.current
+        
         setupMenuBar()
         
         overlayWindow = OverlayWindow(appDelegate: self)
         overlayWindow?.orderFront(nil)
         
         focusWindow = FocusWindow(appDelegate: self)
+        flashWindow = FlashWindow()
         
         updateMenuState(overlayVisible: true)
     }
@@ -53,12 +70,43 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         toggleMenuItem = NSMenuItem(title: "Hide Pace View", action: #selector(toggleOverlay), keyEquivalent: "")
         menu.addItem(toggleMenuItem!)
         
-        heightToggleMenuItem = NSMenuItem(title: "Small Focus Window", action: #selector(toggleHeight), keyEquivalent: "")
-        menu.addItem(heightToggleMenuItem!)
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add focus mode options with size submenus
+        focusModeMenuItems.removeAll()
+        for mode in FocusMode.allCases {
+            let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
+            modeItem.representedObject = mode
+            modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
+            focusModeMenuItems[mode] = modeItem
+            menu.addItem(modeItem)
+        }
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // Add size selector submenu
+        let sizeMenu = NSMenu()
+        focusSizeMenuItems.removeAll()
+        for size in FocusSize.allCases {
+            let sizeItem = NSMenuItem(title: size.displayName, action: #selector(selectFocusSize(_:)), keyEquivalent: "")
+            sizeItem.representedObject = size
+            sizeItem.state = (size == focusConfiguration.size) ? .on : .off
+            focusSizeMenuItems[size] = sizeItem
+            sizeMenu.addItem(sizeItem)
+        }
+        
+        let sizeMenuItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        sizeMenuItem.submenu = sizeMenu
+        menu.addItem(sizeMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
         menu.addItem(focusMenuItem!)
+        
+        menu.addItem(NSMenuItem.separator())
+        flashMenuItem = NSMenuItem(title: "Flash", action: #selector(toggleFlashMode), keyEquivalent: "")
+        menu.addItem(flashMenuItem!)
+        
         menu.addItem(NSMenuItem.separator())
         
         let breatheOutItem = NSMenuItem(title: "Breathe in - Breathe out, repeat", action: nil, keyEquivalent: "")
@@ -67,19 +115,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         
+        // Add Sparkle update menu item
+        let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
+        menu.addItem(checkForUpdatesItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
         menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: "q"))
         
         statusItem?.menu = menu
     }
     
-    @objc func toggleHeight() {
-        isDoubleHeight.toggle()
-        bandHeight = isDoubleHeight ? 400 : 200
-        updateHeightMenuText()
+    @objc func selectFocusMode(_ sender: NSMenuItem) {
+        guard let mode = sender.representedObject as? FocusMode else { return }
+        
+        focusConfiguration.mode = mode
+        FocusConfiguration.current = focusConfiguration
+        
+        updateFocusModeMenu()
     }
     
-    func updateHeightMenuText() {
-        heightToggleMenuItem?.title = isDoubleHeight ? "Small Focus Window" : "Big Focus Window"
+    @objc func selectFocusSize(_ sender: NSMenuItem) {
+        guard let size = sender.representedObject as? FocusSize else { return }
+        
+        focusConfiguration.size = size
+        FocusConfiguration.current = focusConfiguration
+        
+        updateFocusSizeMenu()
+    }
+    
+    func updateFocusModeMenu() {
+        for (mode, item) in focusModeMenuItems {
+            item.state = (mode == focusConfiguration.mode) ? .on : .off
+        }
+    }
+    
+    func updateFocusSizeMenu() {
+        for (size, item) in focusSizeMenuItems {
+            item.state = (size == focusConfiguration.size) ? .on : .off
+        }
     }
     
     func updateMenuState(overlayVisible: Bool) {
@@ -90,7 +164,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             toggleMenuItem?.title = "Show Pace View"
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.off.fill", accessibilityDescription: "Pace Off")
         }
-        updateHeightMenuText()
     }
     
     @objc func toggleOverlay() {
@@ -146,6 +219,82 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             isFocusModeActive = true
             focusMenuItem?.title = "Hide Focus Message"
         }
+    }
+    
+    @objc func toggleFlashMode() {
+        // Toggle the Flash Mode state
+        isFlashModeActive.toggle()
+        
+        // Update menu item checkmark state
+        flashMenuItem?.state = isFlashModeActive ? .on : .off
+        
+        if isFlashModeActive {
+            // Activating Flash Mode
+            showFlashBorder()
+            startFlashTimer()
+        } else {
+            // Deactivating Flash Mode
+            cancelFlashTimer()
+            // Reset menu title when deactivated
+            flashMenuItem?.title = "Flash"
+        }
+    }
+    
+    func updateFlashMenuTitle() {
+        guard let lastFlash = lastFlashTime else {
+            flashMenuItem?.title = "Flash"
+            return
+        }
+        
+        let formatter = DateFormatter()
+        formatter.timeStyle = .short
+        let timeString = formatter.string(from: lastFlash)
+        flashMenuItem?.title = "Flashed at \(timeString)"
+    }
+    
+    func showFlashBorder() {
+        guard let flashWindow = flashWindow else { return }
+        
+        // Update last flash time
+        lastFlashTime = Date()
+        updateFlashMenuTitle()
+        
+        // Create new FlashBorderView with completion callback
+        let flashView = FlashBorderView(onComplete: { [weak self] in
+            // Hide window after animation completes
+            self?.flashWindow?.orderOut(nil)
+        })
+        
+        // Update window content with new view (to restart animation)
+        flashWindow.contentView = NSHostingView(rootView: flashView)
+        
+        // Order flashWindow to front
+        flashWindow.orderFront(nil)
+    }
+    
+    func startFlashTimer() {
+        // Cancel any existing timer first
+        cancelFlashTimer()
+        
+        // Create Timer with 25-minute interval (25 * 60 seconds)
+        flashTimer = Timer.scheduledTimer(
+            withTimeInterval: 25 * 60,
+            repeats: true
+        ) { [weak self] _ in
+            // Call showFlashBorder in timer callback
+            self?.showFlashBorder()
+        }
+    }
+    
+    func cancelFlashTimer() {
+        // Invalidate timer if it exists
+        flashTimer?.invalidate()
+        // Set flashTimer to nil
+        flashTimer = nil
+    }
+    
+    @objc func checkForUpdates() {
+        updaterController?.checkForUpdates(nil)
     }
     
     @objc func quitApp() {
@@ -222,6 +371,75 @@ class FocusWindow: NSWindow {
             appDelegate?.toggleFocusMode()
         } else {
             super.keyDown(with: event)
+        }
+    }
+}
+
+class FlashWindow: NSWindow {
+    convenience init() {
+        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        self.init(
+            contentRect: screenRect,
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        // Configure window to be above everything but transparent and non-interactive
+        self.level = .screenSaver
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = false
+        self.ignoresMouseEvents = true
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
+        
+        self.setFrame(screenRect, display: true)
+        
+        // Initialize with FlashBorderView
+        self.contentView = NSHostingView(rootView: FlashBorderView(onComplete: {}))
+    }
+}
+
+// FlashBorderView - Task 3.1: Structure with state and callback
+struct FlashBorderView: View {
+    @State private var opacity: Double = 0.0
+    @State private var pulseCount: Int = 0
+    var onComplete: () -> Void
+    
+    var body: some View {
+        // Border stroke with gradient from top-left (white) to bottom-right (red)
+        Rectangle()
+            .strokeBorder(
+                LinearGradient(
+                    gradient: Gradient(colors: [Color.white, Color.red]),
+                    startPoint: .topLeading,
+                    endPoint: .bottomTrailing
+                ),
+                lineWidth: 8
+            )
+            .opacity(opacity)
+            .edgesIgnoringSafeArea(.all)
+            .onAppear {
+                startPulseAnimation()
+            }
+    }
+    
+    // Task 3.3: Implement pulse animation
+    private func startPulseAnimation() {
+        // Reset state
+        opacity = 0.0
+        pulseCount = 0
+        
+        // Create repeating animation: 6 pulses over 3 seconds = 0.5s per pulse
+        // Each pulse is 0.25s fade in + 0.25s fade out
+        withAnimation(.easeInOut(duration: 0.25).repeatCount(12, autoreverses: true)) {
+            opacity = 0.7  // More opaque so it's clearly visible
+        }
+        
+        // Call onComplete after 3 seconds (6 complete pulses)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
+            onComplete()
         }
     }
 }
