@@ -1,0 +1,5 @@
+// Configuration file for Pace
+// Copy this to Config.local.xcconfig and add your keys
+
+POSTHOG_API_KEY = your_posthog_api_key_here
+POSTHOG_HOST = https:/​/us.i.posthog.com

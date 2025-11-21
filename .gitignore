@@ -7,7 +7,6 @@
 # Xcode
 *.xcodeproj
 *.xcworkspace
-pace/
 paceTests/
 paceUITests/
 .vscode/
@@ -17,3 +16,6 @@ releases/
 *.sparkle_private_key
 *_priv.pem
 dsa_priv.pem
+
+# Config with secrets
+pace/Config.local.xcconfig

@@ -22,6 +22,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
     var flashWindow: FlashWindow?
+    var onboardingWindow: OnboardingWindow?
     var statusItem: NSStatusItem?
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
@@ -61,20 +62,32 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         setupMenuBar()
         
         overlayWindow = OverlayWindow(appDelegate: self)
-        overlayWindow?.orderFront(nil)
-        overlayShownTime = Date()
-        
         focusWindow = FocusWindow(appDelegate: self)
         flashWindow = FlashWindow()
         
-        updateMenuState(overlayVisible: true)
+        // Check if user has seen onboarding
+        let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
         
-        // Track initial mode
-        AnalyticsManager.shared.trackModeActivated(
-            mode: focusConfiguration.mode.rawValue,
-            size: focusConfiguration.size.rawValue
-        )
-        AnalyticsManager.shared.trackPaceViewShown()
+        if !hasSeenOnboarding {
+            // Show onboarding, don't show overlay yet
+            onboardingWindow = OnboardingWindow(appDelegate: self)
+            onboardingWindow?.orderFront(nil)
+            onboardingWindow?.makeKey()
+            NSApp.activate(ignoringOtherApps: true)
+            updateMenuState(overlayVisible: false)
+        } else {
+            // Show overlay immediately for returning users
+            overlayWindow?.orderFront(nil)
+            overlayShownTime = Date()
+            updateMenuState(overlayVisible: true)
+            
+            // Track initial mode
+            AnalyticsManager.shared.trackModeActivated(
+                mode: focusConfiguration.mode.rawValue,
+                size: focusConfiguration.size.rawValue
+            )
+            AnalyticsManager.shared.trackPaceViewShown()
+        }
     }
     
     func applicationWillTerminate(_ notification: Notification) {
@@ -151,9 +164,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         
-        // Add Sparkle update menu item
+        // Add Extras submenu
+        let extrasMenu = NSMenu()
+        
+        let howToUseItem = NSMenuItem(title: "How to Use", action: #selector(showOnboarding), keyEquivalent: "")
+        extrasMenu.addItem(howToUseItem)
+        
         let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
-        menu.addItem(checkForUpdatesItem)
+        extrasMenu.addItem(checkForUpdatesItem)
+        
+        let extrasMenuItem = NSMenuItem(title: "Extras", action: nil, keyEquivalent: "")
+        extrasMenuItem.submenu = extrasMenu
+        menu.addItem(extrasMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -371,6 +393,33 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         flashTimer = nil
     }
     
+    @objc func showOnboarding() {
+        // Create and show onboarding window
+        onboardingWindow = OnboardingWindow(appDelegate: self)
+        onboardingWindow?.orderFront(nil)
+        onboardingWindow?.makeKey()
+        NSApp.activate(ignoringOtherApps: true)
+    }
+    
+    func closeOnboarding() {
+        onboardingWindow?.orderOut(nil)
+        onboardingWindow = nil
+        
+        // Show overlay for the first time
+        if overlayWindow?.isVisible != true {
+            overlayWindow?.orderFront(nil)
+            overlayShownTime = Date()
+            updateMenuState(overlayVisible: true)
+            
+            // Track initial mode
+            AnalyticsManager.shared.trackModeActivated(
+                mode: focusConfiguration.mode.rawValue,
+                size: focusConfiguration.size.rawValue
+            )
+            AnalyticsManager.shared.trackPaceViewShown()
+        }
+    }
+    
     @objc func checkForUpdates() {
         updaterController?.checkForUpdates(nil)
     }
@@ -476,6 +525,48 @@ class FlashWindow: NSWindow {
         
         // Initialize with FlashBorderView
         self.contentView = NSHostingView(rootView: FlashBorderView(onComplete: {}))
+    }
+}
+
+class OnboardingWindow: NSWindow {
+    weak var appDelegate: AppDelegate?
+    
+    convenience init(appDelegate: AppDelegate) {
+        // Create a centered window (not fullscreen)
+        let width: CGFloat = 700
+        let height: CGFloat = 550
+        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let x = (screenRect.width - width) / 2
+        let y = (screenRect.height - height) / 2
+        let windowRect = CGRect(x: x, y: y, width: width, height: height)
+        
+        self.init(
+            contentRect: windowRect,
+            styleMask: [.titled, .closable, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        self.appDelegate = appDelegate
+        
+        self.title = "Welcome to Pace"
+        self.titlebarAppearsTransparent = true
+        self.titleVisibility = .hidden
+        self.level = .floating
+        self.isMovableByWindowBackground = true
+        self.backgroundColor = .black
+        self.isOpaque = true
+        self.collectionBehavior = [.canJoinAllSpaces]
+        
+        self.contentView = NSHostingView(rootView: OnboardingView(appDelegate: appDelegate))
+    }
+    
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return true
     }
 }
 
