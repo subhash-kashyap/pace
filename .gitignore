@@ -11,6 +11,10 @@ paceTests/
 paceUITests/
 .vscode/
 
+# Build artifacts
+build/
+DerivedData/
+
 # Sparkle
 releases/
 *.sparkle_private_key
