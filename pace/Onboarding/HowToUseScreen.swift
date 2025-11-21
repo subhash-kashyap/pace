@@ -52,14 +52,14 @@ struct SimpleVideoPlayer: NSViewRepresentable {
         
         let view = NSView()
         view.wantsLayer = true
-        view.layer?.backgroundColor = NSColor.red.withAlphaComponent(0.1).cgColor // Debug background
+        view.layer?.backgroundColor = NSColor.white.cgColor
         
         print("✅ View created with layer")
         
         let player = AVPlayer(url: url)
         let playerLayer = AVPlayerLayer(player: player)
         playerLayer.videoGravity = .resizeAspect
-        playerLayer.backgroundColor = NSColor.blue.withAlphaComponent(0.1).cgColor // Debug background
+        playerLayer.backgroundColor = NSColor.clear.cgColor
         playerLayer.frame = CGRect(x: 0, y: 0, width: 600, height: 350)
         
         print("📐 Initial playerLayer frame: \(playerLayer.frame)")
