@@ -5,30 +5,25 @@ struct FeaturesScreen: View {
         VStack(spacing: 30) {
             Spacer()
             
-            Text("Everything you need")
+            Text("The app is in your top tray, it has:")
                 .font(.system(size: 36, weight: .bold))
-                .foregroundColor(.white)
+                .foregroundColor(.black)
             
             VStack(alignment: .leading, spacing: 20) {
                 FeatureRow(
                     icon: "rectangle",
-                    title: "4 Focus Modes",
+                    title: "4 Modes of Overlay",
                     description: "Rectangle, Center Column, Square, and Circle"
-                )
-                FeatureRow(
-                    icon: "arrow.up.left.and.arrow.down.right",
-                    title: "Adjustable Sizes",
-                    description: "Small, Medium, and Large options"
                 )
                 FeatureRow(
                     icon: "doc.text",
                     title: "Focus Message",
-                    description: "Distraction-free writing environment"
+                    description: "Distraction-free black and white space"
                 )
                 FeatureRow(
                     icon: "timer",
-                    title: "Flash Mode",
-                    description: "25-minute Pomodoro timer with alerts"
+                    title: "Flash",
+                    description: "Every 25-minutes screen boundary flashs. I use it to breathe out."
                 )
             }
             .padding(.horizontal, 60)
@@ -38,10 +33,10 @@ struct FeaturesScreen: View {
             // Menu bar reference
             HStack(spacing: 10) {
                 Image(systemName: "arrow.up")
-                    .foregroundColor(.white.opacity(0.6))
-                Text("Find all features in the menu bar")
+                    .foregroundColor(.black.opacity(0.6))
+                Text("Again, everything is in your menubar tray on top, including this.")
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.6))
+                    .foregroundColor(.black.opacity(0.6))
             }
         }
         .padding(.horizontal, 40)
@@ -57,17 +52,17 @@ struct FeatureRow: View {
         HStack(spacing: 15) {
             Image(systemName: icon)
                 .font(.system(size: 24))
-                .foregroundColor(.white)
+                .foregroundColor(.black)
                 .frame(width: 40)
             
             VStack(alignment: .leading, spacing: 4) {
                 Text(title)
                     .font(.system(size: 16, weight: .semibold))
-                    .foregroundColor(.white)
+                    .foregroundColor(.black)
                 
                 Text(description)
                     .font(.system(size: 14))
-                    .foregroundColor(.white.opacity(0.7))
+                    .foregroundColor(.black.opacity(0.7))
             }
         }
     }

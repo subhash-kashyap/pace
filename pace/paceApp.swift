@@ -24,6 +24,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var flashWindow: FlashWindow?
     var onboardingWindow: OnboardingWindow?
     var statusItem: NSStatusItem?
+    
+    @Published var isOnboardingActive: Bool = false
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var flashMenuItem: NSMenuItem?
@@ -68,18 +70,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Check if user has seen onboarding
         let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
         
+        onboardingWindow = OnboardingWindow(appDelegate: self)
+        
         if !hasSeenOnboarding {
             // Show onboarding, don't show overlay yet
-            onboardingWindow = OnboardingWindow(appDelegate: self)
+            isOnboardingActive = true
             onboardingWindow?.orderFront(nil)
             onboardingWindow?.makeKey()
             NSApp.activate(ignoringOtherApps: true)
             updateMenuState(overlayVisible: false)
+            updateModeMenusEnabled(enabled: false)
         } else {
             // Show overlay immediately for returning users
             overlayWindow?.orderFront(nil)
             overlayShownTime = Date()
             updateMenuState(overlayVisible: true)
+            updateModeMenusEnabled(enabled: true)
             
             // Track initial mode
             AnalyticsManager.shared.trackModeActivated(
@@ -250,6 +256,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 }
                 window.orderOut(nil)
                 updateMenuState(overlayVisible: false)
+                updateModeMenusEnabled(enabled: false)
             } else {
                 // Track show
                 overlayShownTime = Date()
@@ -261,7 +268,20 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 }
                 window.orderFront(nil)
                 updateMenuState(overlayVisible: true)
+                updateModeMenusEnabled(enabled: true)
             }
+        }
+    }
+    
+    func updateModeMenusEnabled(enabled: Bool) {
+        // Enable/disable focus mode menu items
+        for (_, item) in focusModeMenuItems {
+            item.isEnabled = enabled
+        }
+        
+        // Enable/disable size menu items
+        for (_, item) in focusSizeMenuItems {
+            item.isEnabled = enabled
         }
     }
     
@@ -394,22 +414,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     @objc func showOnboarding() {
-        // Create and show onboarding window
-        onboardingWindow = OnboardingWindow(appDelegate: self)
-        onboardingWindow?.orderFront(nil)
-        onboardingWindow?.makeKey()
+        guard let onboardingWindow = onboardingWindow else { return }
+        
+        // Hide overlay if visible
+        if overlayWindow?.isVisible == true {
+            overlayWindow?.orderOut(nil)
+            updateMenuState(overlayVisible: false)
+        }
+        
+        // Show onboarding
+        isOnboardingActive = true
+        onboardingWindow.orderFront(nil)
+        onboardingWindow.makeKey()
         NSApp.activate(ignoringOtherApps: true)
     }
     
     func closeOnboarding() {
+        isOnboardingActive = false
         onboardingWindow?.orderOut(nil)
-        onboardingWindow = nil
         
-        // Show overlay for the first time
-        if overlayWindow?.isVisible != true {
+        // Show overlay for the first time (only on initial onboarding)
+        if overlayWindow?.isVisible != true && !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+            // Set default to Circle mode with Medium size
+            focusConfiguration.mode = .circle
+            focusConfiguration.size = .medium
+            FocusConfiguration.current = focusConfiguration
+            updateFocusModeMenu()
+            updateFocusSizeMenu()
+            
             overlayWindow?.orderFront(nil)
             overlayShownTime = Date()
             updateMenuState(overlayVisible: true)
+            updateModeMenusEnabled(enabled: true)
             
             // Track initial mode
             AnalyticsManager.shared.trackModeActivated(
@@ -417,6 +453,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
                 size: focusConfiguration.size.rawValue
             )
             AnalyticsManager.shared.trackPaceViewShown()
+        } else {
+            // Restore overlay if it was visible before
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+            updateModeMenusEnabled(enabled: true)
         }
     }
     
@@ -532,33 +573,26 @@ class OnboardingWindow: NSWindow {
     weak var appDelegate: AppDelegate?
     
     convenience init(appDelegate: AppDelegate) {
-        // Create a centered window (not fullscreen)
-        let width: CGFloat = 700
-        let height: CGFloat = 550
         let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let x = (screenRect.width - width) / 2
-        let y = (screenRect.height - height) / 2
-        let windowRect = CGRect(x: x, y: y, width: width, height: height)
         
         self.init(
-            contentRect: windowRect,
-            styleMask: [.titled, .closable, .fullSizeContentView],
+            contentRect: screenRect,
+            styleMask: [.borderless, .fullSizeContentView],
             backing: .buffered,
             defer: false
         )
         
         self.appDelegate = appDelegate
         
-        self.title = "Welcome to Pace"
-        self.titlebarAppearsTransparent = true
-        self.titleVisibility = .hidden
-        self.level = .floating
-        self.isMovableByWindowBackground = true
-        self.backgroundColor = .black
+        self.level = .statusBar
+        self.backgroundColor = .white
         self.isOpaque = true
-        self.collectionBehavior = [.canJoinAllSpaces]
+        self.hasShadow = false
+        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         
-        self.contentView = NSHostingView(rootView: OnboardingView(appDelegate: appDelegate))
+        self.setFrame(screenRect, display: true)
+        
+        self.contentView = NSHostingView(rootView: OnboardingContainerView(appDelegate: appDelegate))
     }
     
     override var canBecomeKey: Bool {
@@ -567,6 +601,55 @@ class OnboardingWindow: NSWindow {
     
     override var canBecomeMain: Bool {
         return true
+    }
+    
+    override func keyDown(with event: NSEvent) {
+        // Close onboarding when ESC is pressed
+        if event.keyCode == 53 {
+            appDelegate?.closeOnboarding()
+        } else {
+            super.keyDown(with: event)
+        }
+    }
+}
+
+struct OnboardingContainerView: View {
+    @ObservedObject var appDelegate: AppDelegate
+    @State private var currentPage: Int = 1
+    
+    var body: some View {
+        ZStack {
+            Color.white.edgesIgnoringSafeArea(.all)
+            
+            VStack {
+                HStack {
+                    Spacer()
+                    Button(action: {
+                        appDelegate.closeOnboarding()
+                        currentPage = 1  // Reset to first page
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .font(.system(size: 24))
+                            .foregroundColor(.black.opacity(0.5))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                    .padding()
+                }
+                
+                Spacer()
+                
+                OnboardingView(
+                    currentPage: $currentPage,
+                    onComplete: {
+                        UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                        appDelegate.closeOnboarding()
+                        currentPage = 1  // Reset to first page
+                    }
+                )
+                
+                Spacer()
+            }
+        }
     }
 }
 
