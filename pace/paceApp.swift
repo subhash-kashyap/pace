@@ -6,6 +6,11 @@ import Sparkle
 struct PaceApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     
+    init() {
+        // Initialize analytics
+        AnalyticsManager.shared.configure()
+    }
+    
     var body: some Scene {
         Settings {
             EmptyView()
@@ -29,6 +34,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     // Track whether the overlay was visible before entering focus mode
     private var prevOverlayWasVisible: Bool = false
     
+    // Analytics tracking
+    private var overlayShownTime: Date?
+    private var focusModeShownTime: Date?
+    
     // Sparkle updater
     private var updaterController: SPUStandardUpdaterController?
 
@@ -40,6 +49,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
         
+        // Track app opened
+        AnalyticsManager.shared.trackAppOpened()
+        
         // Initialize Sparkle updater
         updaterController = SPUStandardUpdaterController(startingUpdater: true, updaterDelegate: nil, userDriverDelegate: nil)
         
@@ -50,11 +62,35 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         overlayWindow = OverlayWindow(appDelegate: self)
         overlayWindow?.orderFront(nil)
+        overlayShownTime = Date()
         
         focusWindow = FocusWindow(appDelegate: self)
         flashWindow = FlashWindow()
         
         updateMenuState(overlayVisible: true)
+        
+        // Track initial mode
+        AnalyticsManager.shared.trackModeActivated(
+            mode: focusConfiguration.mode.rawValue,
+            size: focusConfiguration.size.rawValue
+        )
+        AnalyticsManager.shared.trackPaceViewShown()
+    }
+    
+    func applicationWillTerminate(_ notification: Notification) {
+        // Track app closed and any active sessions
+        if let startTime = overlayShownTime, overlayWindow?.isVisible == true {
+            let duration = Date().timeIntervalSince(startTime)
+            AnalyticsManager.shared.trackPaceViewHidden(duration: duration)
+        }
+        
+        if let startTime = focusModeShownTime, isFocusModeActive {
+            let duration = Date().timeIntervalSince(startTime)
+            AnalyticsManager.shared.trackFocusModeHidden(duration: duration)
+        }
+        
+        AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
+        AnalyticsManager.shared.trackAppClosed()
     }
     
     func setupMenuBar() {
@@ -129,8 +165,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func selectFocusMode(_ sender: NSMenuItem) {
         guard let mode = sender.representedObject as? FocusMode else { return }
         
+        // Track mode change
+        AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
+        
         focusConfiguration.mode = mode
         FocusConfiguration.current = focusConfiguration
+        
+        AnalyticsManager.shared.trackModeActivated(
+            mode: mode.rawValue,
+            size: focusConfiguration.size.rawValue
+        )
         
         updateFocusModeMenu()
     }
@@ -138,8 +182,16 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func selectFocusSize(_ sender: NSMenuItem) {
         guard let size = sender.representedObject as? FocusSize else { return }
         
+        // Track size change (as a mode update)
+        AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
+        
         focusConfiguration.size = size
         FocusConfiguration.current = focusConfiguration
+        
+        AnalyticsManager.shared.trackModeActivated(
+            mode: focusConfiguration.mode.rawValue,
+            size: size.rawValue
+        )
         
         updateFocusSizeMenu()
     }
@@ -169,9 +221,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func toggleOverlay() {
         if let window = overlayWindow {
             if window.isVisible {
+                // Track hide
+                if let startTime = overlayShownTime {
+                    let duration = Date().timeIntervalSince(startTime)
+                    AnalyticsManager.shared.trackPaceViewHidden(duration: duration)
+                }
                 window.orderOut(nil)
                 updateMenuState(overlayVisible: false)
             } else {
+                // Track show
+                overlayShownTime = Date()
+                AnalyticsManager.shared.trackPaceViewShown()
+                
                 if isFocusModeActive {
                     focusWindow?.orderOut(nil)
                     isFocusModeActive = false
@@ -190,6 +251,13 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
 
         if isFocusModeActive {
             print("❌ Hiding focus mode")
+            
+            // Track focus mode hidden
+            if let startTime = focusModeShownTime {
+                let duration = Date().timeIntervalSince(startTime)
+                AnalyticsManager.shared.trackFocusModeHidden(duration: duration)
+            }
+            
             focusWindow.orderOut(nil)
             isFocusModeActive = false
             focusMenuItem?.title = "Show Focus Message"
@@ -202,6 +270,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             }
         } else {
             print("✅ Showing focus mode")
+            
+            // Track focus mode shown
+            focusModeShownTime = Date()
+            AnalyticsManager.shared.trackFocusModeShown()
 
             // remember whether overlay is visible so we can restore it on close
             prevOverlayWasVisible = (overlayWindow?.isVisible == true)
@@ -224,6 +296,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func toggleFlashMode() {
         // Toggle the Flash Mode state
         isFlashModeActive.toggle()
+        
+        // Track flash mode toggle
+        AnalyticsManager.shared.trackFlashModeToggled(isActive: isFlashModeActive)
         
         // Update menu item checkmark state
         flashMenuItem?.state = isFlashModeActive ? .on : .off
@@ -254,6 +329,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     func showFlashBorder() {
         guard let flashWindow = flashWindow else { return }
+        
+        // Track flash triggered
+        AnalyticsManager.shared.trackFlashTriggered()
         
         // Update last flash time
         lastFlashTime = Date()
