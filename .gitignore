@@ -23,3 +23,4 @@ dsa_priv.pem
 
 # Config with secrets
 pace/Config.local.xcconfig
+pace/Config.plist

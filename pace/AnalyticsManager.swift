@@ -11,15 +11,50 @@ class AnalyticsManager {
     private init() {}
     
     func configure() {
-        let config = PostHogConfig(apiKey: Config.posthogAPIKey, host: Config.posthogHost)
+        let apiKey = Config.posthogAPIKey
+        let host = Config.posthogHost
+        
+        NSLog("🔧 Configuring PostHog...")
+        NSLog("   API Key: \(apiKey.prefix(10))... (length: \(apiKey.count))")
+        NSLog("   Host: \(host)")
+        
+        if apiKey.isEmpty {
+            NSLog("❌ ERROR: PostHog API key is empty!")
+            return
+        }
+        
+        let config = PostHogConfig(apiKey: apiKey, host: host)
+        config.debug = true  // Enable debug logging
+        config.flushAt = 1   // Send events immediately (for testing)
+        config.flushIntervalSeconds = 10  // Flush every 10 seconds
+        
         PostHogSDK.shared.setup(config)
+        
+        // Identify the user with a persistent anonymous ID
+        let userId = getOrCreateUserId()
+        PostHogSDK.shared.identify(userId)
+        NSLog("✅ PostHog configured successfully with user ID: \(userId)")
+    }
+    
+    private func getOrCreateUserId() -> String {
+        let key = "posthog_user_id"
+        if let existingId = UserDefaults.standard.string(forKey: key) {
+            return existingId
+        }
+        
+        // Create a new anonymous user ID
+        let newId = UUID().uuidString
+        UserDefaults.standard.set(newId, forKey: key)
+        return newId
     }
     
     // MARK: - App Lifecycle Events
     
     func trackAppOpened() {
         sessionStartTime = Date()
+        NSLog("📊 Tracking: app_opened")
         PostHogSDK.shared.capture("app_opened")
+        PostHogSDK.shared.flush()  // Force immediate send
     }
     
     func trackAppClosed() {
@@ -35,7 +70,9 @@ class AnalyticsManager {
     // MARK: - View Tracking
     
     func trackPaceViewShown() {
+        NSLog("📊 Tracking: pace_view_shown")
         PostHogSDK.shared.capture("pace_view_shown")
+        PostHogSDK.shared.flush()  // Force immediate send
     }
     
     func trackPaceViewHidden(duration: TimeInterval) {
@@ -50,6 +87,7 @@ class AnalyticsManager {
         // End previous mode if exists
         if let prevMode = currentMode, let startTime = modeStartTimes[prevMode] {
             let duration = Date().timeIntervalSince(startTime)
+            NSLog("📊 Tracking: mode_deactivated (\(prevMode))")
             PostHogSDK.shared.capture("mode_deactivated", properties: [
                 "mode": prevMode,
                 "duration_seconds": duration
@@ -60,10 +98,12 @@ class AnalyticsManager {
         currentMode = mode
         modeStartTimes[mode] = Date()
         
+        NSLog("📊 Tracking: mode_activated (\(mode), \(size))")
         PostHogSDK.shared.capture("mode_activated", properties: [
             "mode": mode,
             "size": size
         ])
+        PostHogSDK.shared.flush()  // Force immediate send
     }
     
     func trackModeDeactivated(mode: String) {
