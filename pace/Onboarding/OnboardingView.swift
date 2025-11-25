@@ -68,6 +68,7 @@ struct OnboardingView: View {
                         } else {
                             // Mark onboarding as complete and close
                             UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                            AnalyticsManager.shared.trackOnboardingCompleted()
                             onComplete()
                         }
                     }) {

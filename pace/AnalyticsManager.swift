@@ -52,8 +52,13 @@ class AnalyticsManager {
     
     func trackAppOpened() {
         sessionStartTime = Date()
-        NSLog("📊 Tracking: app_opened")
-        PostHogSDK.shared.capture("app_opened")
+        let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
+        let isNewUser = !hasSeenOnboarding
+        
+        NSLog("📊 Tracking: app_opened (new_user: \(isNewUser))")
+        PostHogSDK.shared.capture("app_opened", properties: [
+            "is_new_user": isNewUser
+        ])
         PostHogSDK.shared.flush()  // Force immediate send
     }
     
@@ -140,5 +145,13 @@ class AnalyticsManager {
     
     func trackFlashTriggered() {
         PostHogSDK.shared.capture("flash_triggered")
+    }
+    
+    // MARK: - Onboarding Tracking
+    
+    func trackOnboardingCompleted() {
+        NSLog("📊 Tracking: onboarding_completed")
+        PostHogSDK.shared.capture("onboarding_completed")
+        PostHogSDK.shared.flush()  // Force immediate send
     }
 }
