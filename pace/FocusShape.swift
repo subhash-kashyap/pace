@@ -81,8 +81,9 @@ struct FocusConfiguration {
                     mode = .rectangle
                     size = .medium
                 default:
-                    mode = .rectangle
-                    size = .small
+                    // Default for new users: Circle + Medium
+                    mode = .circle
+                    size = .medium
                 }
             }
             

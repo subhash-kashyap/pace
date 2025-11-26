@@ -6,6 +6,30 @@
         <description>Most recent updates to Pace</description>
         <language>en</language>
         <item>
+            <title>Version 1.0.1</title>
+            <description>
+                <![CDATA[
+                    <h2>Version 1.0.1 - UX Improvements</h2>
+                    <ul>
+                        <li>Improved menu: One-click mode switching</li>
+                        <li>Default mode changed to Circle (James Bond) for new users</li>
+                        <li>Fixed analytics tracking for new users</li>
+                        <li>Added onboarding completion tracking</li>
+                    </ul>
+                ]]>
+            </description>
+            <pubDate>Wed, 26 Nov 2025 12:00:00 +0000</pubDate>
+            <sparkle:version>1.0.1</sparkle:version>
+            <sparkle:shortVersionString>1.0.1</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>11.5</sparkle:minimumSystemVersion>
+            <enclosure 
+                url="https://github.com/YOUR_USERNAME/pace/releases/download/v1.0.1/Pace-1.0.1.zip"
+                sparkle:edSignature="SIGNATURE_WILL_BE_GENERATED"
+                length="20818299"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.0.0</title>
             <description>
                 <![CDATA[

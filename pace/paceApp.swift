@@ -122,12 +122,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         let menu = NSMenu()
         
-        toggleMenuItem = NSMenuItem(title: "Hide Pace View", action: #selector(toggleOverlay), keyEquivalent: "")
+        // Add "Turn Off" as first option
+        toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
+        toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
         menu.addItem(toggleMenuItem!)
         
-        menu.addItem(NSMenuItem.separator())
-        
-        // Add focus mode options with size submenus
+        // Add focus mode options
         focusModeMenuItems.removeAll()
         for mode in FocusMode.allCases {
             let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
@@ -204,6 +204,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             size: focusConfiguration.size.rawValue
         )
         
+        // Show overlay if it's hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
         updateFocusModeMenu()
     }
     
@@ -221,12 +229,22 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             size: size.rawValue
         )
         
+        // Show overlay if it's hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
         updateFocusSizeMenu()
     }
     
     func updateFocusModeMenu() {
+        let overlayVisible = overlayWindow?.isVisible == true
         for (mode, item) in focusModeMenuItems {
-            item.state = (mode == focusConfiguration.mode) ? .on : .off
+            // Only show checkmark on active mode if overlay is visible
+            item.state = (overlayVisible && mode == focusConfiguration.mode) ? .on : .off
         }
     }
     
@@ -238,12 +256,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     func updateMenuState(overlayVisible: Bool) {
         if overlayVisible {
-            toggleMenuItem?.title = "Hide Pace View"
+            // Overlay is visible - uncheck "Turn Off", check the active mode
+            toggleMenuItem?.state = .off
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.on.fill", accessibilityDescription: "Pace On")
         } else {
-            toggleMenuItem?.title = "Show Pace View"
+            // Overlay is hidden - check "Turn Off", uncheck all modes
+            toggleMenuItem?.state = .on
             statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.off.fill", accessibilityDescription: "Pace Off")
         }
+        updateFocusModeMenu()
     }
     
     @objc func toggleOverlay() {
@@ -274,14 +295,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func updateModeMenusEnabled(enabled: Bool) {
-        // Enable/disable focus mode menu items
+        // Mode and size menu items are always enabled now
+        // Users can click them to both show overlay and change mode in one action
         for (_, item) in focusModeMenuItems {
-            item.isEnabled = enabled
+            item.isEnabled = true
         }
         
-        // Enable/disable size menu items
         for (_, item) in focusSizeMenuItems {
-            item.isEnabled = enabled
+            item.isEnabled = true
         }
     }
     
