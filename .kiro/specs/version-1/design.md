@@ -69,7 +69,7 @@ enum FocusMode: String, CaseIterable {
         case .rectangle: return "Rectangle"
         case .centerColumn: return "Center Column"
         case .square: return "Square"
-        case .circle: return "James Bond"
+        case .circle: return "Circle"
         }
     }
 }
@@ -279,7 +279,7 @@ struct CircleShape: FocusShape {
 ├── Rectangle [✓]
 ├── Center Column
 ├── Square
-├── James Bond
+├── Circle
 ├── ─────────────────
 ├── Size ▶
 │   ├── S [✓]

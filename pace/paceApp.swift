@@ -18,6 +18,143 @@ struct PaceApp: App {
     }
 }
 
+// MARK: - Global Hotkey Manager (CGEventTap)
+class GlobalHotkeyManager {
+    weak var appDelegate: AppDelegate?
+    private var eventTap: CFMachPort?
+    private var runLoopSource: CFRunLoopSource?
+    private var permissionCheckTimer: Timer?
+    
+    init?(appDelegate: AppDelegate) {
+        self.appDelegate = appDelegate
+        
+        if !setupEventTap(appDelegate: appDelegate) {
+            // Failed to create tap - start polling for permission
+            startPermissionPolling(appDelegate: appDelegate)
+            return nil
+        }
+    }
+    
+    private func setupEventTap(appDelegate: AppDelegate) -> Bool {
+        // Create event tap for keyDown events
+        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+        
+        // Create the event tap
+        guard let tap = CGEvent.tapCreate(
+            tap: .cgSessionEventTap,
+            place: .headInsertEventTap,
+            options: .defaultTap,
+            eventsOfInterest: eventMask,
+            callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
+                guard type == .keyDown else {
+                    return Unmanaged.passRetained(event)
+                }
+                
+                // Get the AppDelegate from refcon
+                let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon!).takeUnretainedValue()
+                
+                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
+                let flags = event.flags
+                
+                let hasCtrl = flags.contains(.maskControl)
+                let hasOpt = flags.contains(.maskAlternate)
+                
+                // Check for ⌃⌥ combination
+                if hasCtrl && hasOpt {
+                    switch keyCode {
+                    case 31: // ⌃⌥O - Cycle focus modes
+                        print("🎹 ⌃⌥O Cycling focus mode")
+                        DispatchQueue.main.async {
+                            appDelegate.cycleNextFocusMode()
+                        }
+                        return nil // Swallow event
+                    case 35: // ⌃⌥P - Cycle sizes
+                        print("🎹 ⌃⌥P Cycling size")
+                        DispatchQueue.main.async {
+                            appDelegate.cycleNextFocusSize()
+                        }
+                        return nil // Swallow event
+                    case 37: // ⌃⌥L - Turn off overlay
+                        print("🎹 ⌃⌥L Turning off overlay")
+                        DispatchQueue.main.async {
+                            appDelegate.turnOffOverlay()
+                        }
+                        return nil // Swallow event
+                    case 3: // ⌃⌥F - Toggle focus message
+                        print("🎹 ⌃⌥F Toggling focus message")
+                        DispatchQueue.main.async {
+                            appDelegate.toggleFocusMode()
+                        }
+                        return nil // Swallow event
+                    default:
+                        break
+                    }
+                }
+                
+                // Pass through all other events
+                return Unmanaged.passRetained(event)
+            },
+            userInfo: Unmanaged.passUnretained(appDelegate).toOpaque()
+        ) else {
+            print("❌ Failed to create CGEventTap - Input Monitoring permission required")
+            return false
+        }
+        
+        self.eventTap = tap
+        
+        // Create run loop source and add to current run loop
+        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
+        self.runLoopSource = source
+        
+        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
+        
+        print("✅ Global hotkey manager initialized with CGEventTap")
+        return true
+    }
+    
+    private func startPermissionPolling(appDelegate: AppDelegate) {
+        print("🔄 Starting permission polling - will auto-enable when granted")
+        
+        // Poll every 2 seconds to check if permission was granted
+        permissionCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            
+            // Try to create the event tap
+            if self.setupEventTap(appDelegate: appDelegate) {
+                print("✅ Permission granted! Hotkeys now active.")
+                self.permissionCheckTimer?.invalidate()
+                self.permissionCheckTimer = nil
+                
+                // Notify user
+                DispatchQueue.main.async {
+                    self.showHotkeysEnabledNotification()
+                }
+            }
+        }
+    }
+    
+    private func showHotkeysEnabledNotification() {
+        let alert = NSAlert()
+        alert.messageText = "Global Hotkeys Enabled! 🎉"
+        alert.informativeText = "You can now use keyboard shortcuts from any app:\n\n⌃⌥O - Cycle modes\n⌃⌥P - Cycle sizes\n⌃⌥L - Turn off\n⌃⌥F - Focus message"
+        alert.alertStyle = .informational
+        alert.addButton(withTitle: "Got it!")
+        alert.runModal()
+    }
+    
+    deinit {
+        permissionCheckTimer?.invalidate()
+        if let tap = eventTap {
+            CGEvent.tapEnable(tap: tap, enable: false)
+            CFMachPortInvalidate(tap)
+        }
+        if let source = runLoopSource {
+            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        }
+    }
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
@@ -25,6 +162,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var onboardingWindow: OnboardingWindow?
     var sidePanelWindow: SidePanelWindow?
     var statusItem: NSStatusItem?
+    private var hotkeyManager: GlobalHotkeyManager?
     
     @Published var isOnboardingActive: Bool = false
     @Published var isSidePanelExpanded: Bool = false
@@ -63,6 +201,29 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Load saved configuration
         focusConfiguration = FocusConfiguration.current
+        
+        // Initialize global hotkey manager (CGEventTap)
+        hotkeyManager = GlobalHotkeyManager(appDelegate: self)
+        if hotkeyManager == nil {
+            print("⚠️ Hotkey manager failed to initialize - waiting for Input Monitoring permission")
+            
+            // Show helpful alert
+            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
+                let alert = NSAlert()
+                alert.messageText = "Enable Global Hotkeys"
+                alert.informativeText = "Pace needs your permission for keyboard shortcuts \n\n⌃ + ⌥ + O - Different modes\n⌃ + ⌥ + P - Different sizes\n⌃ + ⌥ + L - Turn off\n⌃ + ⌥ + F - Focus message\n"
+                alert.alertStyle = .informational
+                alert.addButton(withTitle: "Open System Settings")
+                alert.addButton(withTitle: "Later")
+                
+                let response = alert.runModal()
+                if response == .alertFirstButtonReturn {
+                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_InputMonitoring") {
+                        NSWorkspace.shared.open(url)
+                    }
+                }
+            }
+        }
         
         setupMenuBar()
         
@@ -119,6 +280,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         AnalyticsManager.shared.trackAppClosed()
     }
     
+    func createMenuTitle(_ title: String, shortcut: String? = nil) -> NSAttributedString {
+        if let shortcut = shortcut {
+            let fullString = "\(title)    \(shortcut)"
+            let attributedString = NSMutableAttributedString(string: fullString)
+            
+            // Make the shortcut gray
+            let shortcutRange = (fullString as NSString).range(of: shortcut)
+            attributedString.addAttribute(.foregroundColor, value: NSColor.secondaryLabelColor, range: shortcutRange)
+            
+            // Right align the shortcut using a paragraph style
+            let paragraphStyle = NSMutableParagraphStyle()
+            paragraphStyle.tabStops = [NSTextTab(textAlignment: .right, location: 200)]
+            attributedString.addAttribute(.paragraphStyle, value: paragraphStyle, range: NSRange(location: 0, length: attributedString.length))
+            
+            return attributedString
+        }
+        return NSAttributedString(string: title)
+    }
+    
     func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         
@@ -131,13 +311,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Add "Turn Off" as first option
         toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
+        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌥L")
         toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
         menu.addItem(toggleMenuItem!)
         
         // Add focus mode options
         focusModeMenuItems.removeAll()
-        for mode in FocusMode.allCases {
+        for (index, mode) in FocusMode.allCases.enumerated() {
             let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
+            if index == 0 {
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌥O")
+            }
             modeItem.representedObject = mode
             modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
             focusModeMenuItems[mode] = modeItem
@@ -149,8 +333,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Add size selector submenu
         let sizeMenu = NSMenu()
         focusSizeMenuItems.removeAll()
-        for size in FocusSize.allCases {
+        for (index, size) in FocusSize.allCases.enumerated() {
             let sizeItem = NSMenuItem(title: size.displayName, action: #selector(selectFocusSize(_:)), keyEquivalent: "")
+            if index == 0 {
+                sizeItem.attributedTitle = createMenuTitle(size.displayName, shortcut: "⌃⌥P")
+            }
             sizeItem.representedObject = size
             sizeItem.state = (size == focusConfiguration.size) ? .on : .off
             focusSizeMenuItems[size] = sizeItem
@@ -178,6 +365,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
+        focusMenuItem?.attributedTitle = createMenuTitle("Show Focus Message", shortcut: "⌃⌥F")
         menu.addItem(focusMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
@@ -207,7 +395,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         
-        menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: ""))
         
         statusItem?.menu = menu
     }
@@ -359,6 +547,57 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         for (_, item) in backgroundStyleMenuItems {
             item.isEnabled = true
+        }
+    }
+    
+    // MARK: - Keyboard Hotkey Methods
+    
+    @objc func cycleNextFocusMode() {
+        // Show overlay if hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
+        // Get next mode in cycle
+        let allModes = FocusMode.allCases
+        guard let currentIndex = allModes.firstIndex(of: focusConfiguration.mode) else { return }
+        let nextIndex = (currentIndex + 1) % allModes.count
+        let nextMode = allModes[nextIndex]
+        
+        applyFocusMode(nextMode)
+    }
+    
+    @objc func cycleNextFocusSize() {
+        // Show overlay if hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
+        // Get next size in cycle
+        let allSizes = FocusSize.allCases
+        guard let currentIndex = allSizes.firstIndex(of: focusConfiguration.size) else { return }
+        let nextIndex = (currentIndex + 1) % allSizes.count
+        let nextSize = allSizes[nextIndex]
+        
+        applyFocusSize(nextSize)
+    }
+    
+    @objc func turnOffOverlay() {
+        if overlayWindow?.isVisible == true {
+            // Track hide
+            if let startTime = overlayShownTime {
+                let duration = Date().timeIntervalSince(startTime)
+                AnalyticsManager.shared.trackPaceViewHidden(duration: duration)
+            }
+            overlayWindow?.orderOut(nil)
+            updateMenuState(overlayVisible: false)
+            updateModeMenusEnabled(enabled: false)
         }
     }
     
@@ -620,13 +859,14 @@ class FocusWindow: NSWindow {
     }
     
     // Close focus mode when the user presses ESC
-    override func keyDown(with event: NSEvent) {
+    // Use performKeyEquivalent to intercept before responder chain
+    override func performKeyEquivalent(with event: NSEvent) -> Bool {
         // 53 is the keyCode for ESC
         if event.keyCode == 53 {
             appDelegate?.toggleFocusMode()
-        } else {
-            super.keyDown(with: event)
+            return true
         }
+        return super.performKeyEquivalent(with: event)
     }
 }
 
@@ -782,7 +1022,8 @@ struct ExpandedSidePanel: View {
                         // Turn Off button
                         SidePanelButton(
                             title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
-                            isChecked: appDelegate.overlayWindow?.isVisible != true
+                            isChecked: appDelegate.overlayWindow?.isVisible != true,
+                            shortcut: "⌃⌥L"
                         ) {
                             appDelegate.toggleOverlay()
                             appDelegate.collapseSidePanel()
@@ -793,10 +1034,11 @@ struct ExpandedSidePanel: View {
                             .padding(.vertical, 2)
                     
                     // Focus Modes
-                    ForEach(FocusMode.allCases, id: \.self) { mode in
+                    ForEach(Array(FocusMode.allCases.enumerated()), id: \.element) { index, mode in
                         SidePanelButton(
                             title: mode.displayName,
-                            isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true
+                            isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true,
+                            shortcut: index == 0 ? "⌃⌥O" : nil
                         ) {
                             appDelegate.applyFocusMode(mode)
                             appDelegate.collapseSidePanel()
@@ -830,11 +1072,12 @@ struct ExpandedSidePanel: View {
                         .buttonStyle(PlainButtonStyle())
                     
                         if showSizeSubmenu {
-                            ForEach(FocusSize.allCases, id: \.self) { size in
+                            ForEach(Array(FocusSize.allCases.enumerated()), id: \.element) { index, size in
                                 SidePanelButton(
                                     title: size.displayName,
                                     isChecked: size == appDelegate.focusConfiguration.size,
-                                    isIndented: true
+                                    isIndented: true,
+                                    shortcut: index == 0 ? "⌃⌥P" : nil
                                 ) {
                                     appDelegate.applyFocusSize(size)
                                     appDelegate.collapseSidePanel()
@@ -888,7 +1131,8 @@ struct ExpandedSidePanel: View {
                         // Focus Message
                         SidePanelButton(
                             title: "Show Focus Message",
-                            isChecked: false
+                            isChecked: false,
+                            shortcut: "⌃⌥F"
                         ) {
                             appDelegate.toggleFocusMode()
                             appDelegate.collapseSidePanel()
@@ -963,6 +1207,7 @@ struct SidePanelButton: View {
     let title: String
     let isChecked: Bool
     var isIndented: Bool = false
+    var shortcut: String? = nil
     let action: () -> Void
     
     var body: some View {
@@ -982,6 +1227,12 @@ struct SidePanelButton: View {
                     .foregroundColor(.white)
                 
                 Spacer()
+                
+                if let shortcut = shortcut {
+                    Text(shortcut)
+                        .font(.system(size: 11))
+                        .foregroundColor(.white.opacity(0.5))
+                }
             }
             .padding(.horizontal, isIndented ? 24 : 12)
             .padding(.vertical, 5)

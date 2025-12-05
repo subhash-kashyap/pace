@@ -185,7 +185,7 @@ struct SimpleTextView: NSViewRepresentable {
         let textView = NSTextView()
         textView.delegate = context.coordinator
         textView.backgroundColor = .black           // Black background
-        textView.textColor = .white                 // White text
+        textView.textColor = .white                 // White text
         textView.insertionPointColor = .white       // White cursor
         textView.font = .monospacedSystemFont(ofSize: 16, weight: .regular)
         textView.usesAdaptiveColorMappingForDarkAppearance = false

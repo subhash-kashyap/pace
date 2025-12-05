@@ -66,7 +66,7 @@ enum FocusMode: String, CaseIterable {
         case .square:
             return "Square"
         case .circle:
-            return "James Bond"
+            return "Circle"
         }
     }
 }
@@ -229,7 +229,7 @@ struct CenterColumnShape: FocusShape {
 struct CircleShape: FocusShape {
     let diameter: CGFloat
     
-    var displayName: String { "James Bond" }
+    var displayName: String { "Circle" }
     
     func createMask(in rect: CGRect, at position: CGPoint) -> Path {
         var path = Path()

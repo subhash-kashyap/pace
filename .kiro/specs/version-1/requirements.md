@@ -18,7 +18,7 @@ This document specifies all requirements for the Pace macOS application, a readi
 - **Rectangle Mode**: Horizontal bar focus that spans the full screen width
 - **Center Column Mode**: Horizontal bar focus at 70% screen width, centered horizontally (ideal for blog/article reading)
 - **Square Mode**: Rectangular focus area that follows the mouse cursor in both directions
-- **Circle Mode**: Circular focus area that follows the mouse cursor (aka "James Bond")
+- **Circle Mode**: Circular focus area that follows the mouse cursor (aka "Circle")
 
 ### Flash Mode
 - **Flash Mode**: A timer-based mode that displays a pulsing border at 25-minute intervals

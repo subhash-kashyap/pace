@@ -6,13 +6,41 @@
         <description>Most recent updates to Pace</description>
         <language>en</language>
         <item>
+            <title>Version 1.0.2</title>
+            <description>
+                <![CDATA[
+                    <h2>Version 1.0.2 - Global Hotkeys</h2>
+                    <ul>
+                        <li><strong>Global Keyboard Shortcuts:</strong> Control Pace from any app</li>
+                        <li>⌃⌥O - Cycle through focus modes (Rectangle → Square → Center Column → Circle)</li>
+                        <li>⌃⌥P - Cycle through sizes (S → M → L)</li>
+                        <li>⌃⌥L - Turn overlay off</li>
+                        <li>⌃⌥F - Toggle focus message window</li>
+                        <li>Shortcuts displayed in menu bar and side panel</li>
+                        <li>ESC key now properly closes focus message window</li>
+                        <li>Requires Input Monitoring permission (one-time setup)</li>
+                    </ul>
+                ]]>
+            </description>
+            <pubDate>Thu, 05 Dec 2024 12:00:00 +0000</pubDate>
+            <sparkle:version>1.0.2</sparkle:version>
+            <sparkle:shortVersionString>1.0.2</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>11.5</sparkle:minimumSystemVersion>
+            <enclosure 
+                url="https://github.com/YOUR_USERNAME/pace/releases/download/v1.0.2/Pace-1.0.2.zip"
+                sparkle:edSignature="SIGNATURE_WILL_BE_GENERATED"
+                length="0"
+                type="application/octet-stream"
+            />
+        </item>
+        <item>
             <title>Version 1.0.1</title>
             <description>
                 <![CDATA[
                     <h2>Version 1.0.1 - UX Improvements</h2>
                     <ul>
                         <li>Improved menu: One-click mode switching</li>
-                        <li>Default mode changed to Circle (James Bond) for new users</li>
+                        <li>Default mode changed to Circle (Circle) for new users</li>
                         <li>Fixed analytics tracking for new users</li>
                         <li>Added onboarding completion tracking</li>
                     </ul>

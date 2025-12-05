@@ -12,7 +12,7 @@ B. Overlay window to help with focus.
 
 ## Features
 
-- **Multiple Focus Modes**: Rectangle, Center Column, Square, and Circle (James Bond style)
+- **Multiple Focus Modes**: Rectangle, Center Column, Square, and Circle (Circle style)
 - **Adjustable Sizes**: Small, Medium, and Large options for each mode
 - **Focus Message Mode**: Distraction-free writing environment
 - **Flash Mode**: 25-minute Pomodoro timer with visual alerts
