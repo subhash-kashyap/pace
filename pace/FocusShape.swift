@@ -24,6 +24,32 @@ enum FocusSize: String, CaseIterable {
     }
 }
 
+// MARK: - Background Style Enum
+enum BackgroundStyle: String, CaseIterable {
+    case black = "black"
+    case black70 = "black70"
+    case white = "white"
+    case white70 = "white70"
+    
+    var displayName: String {
+        switch self {
+        case .black: return "Black"
+        case .black70: return "Black 70%"
+        case .white: return "White"
+        case .white70: return "White 70%"
+        }
+    }
+    
+    var color: Color {
+        switch self {
+        case .black: return Color.black
+        case .black70: return Color.black.opacity(0.7)
+        case .white: return Color.white
+        case .white70: return Color.white.opacity(0.7)
+        }
+    }
+}
+
 // MARK: - Focus Mode Enum
 enum FocusMode: String, CaseIterable {
     case rectangle = "rectangle"
@@ -49,10 +75,12 @@ enum FocusMode: String, CaseIterable {
 struct FocusConfiguration {
     var mode: FocusMode
     var size: FocusSize
+    var backgroundStyle: BackgroundStyle
     
     private static let userDefaults = UserDefaults.standard
     private static let focusModeKey = "PaceFocusMode"
     private static let focusSizeKey = "PaceFocusSize"
+    private static let backgroundStyleKey = "PaceBackgroundStyle"
     private static let legacyBandHeightKey = "PaceBandHeight"
     
     // Base dimensions (for small size)
@@ -64,10 +92,12 @@ struct FocusConfiguration {
         get {
             let modeString = userDefaults.string(forKey: focusModeKey) ?? ""
             let sizeString = userDefaults.string(forKey: focusSizeKey) ?? FocusSize.small.rawValue
+            let bgString = userDefaults.string(forKey: backgroundStyleKey) ?? BackgroundStyle.black70.rawValue
             
             // Migration: convert old modes to new system
             var mode: FocusMode
             var size: FocusSize = FocusSize(rawValue: sizeString) ?? .small
+            let backgroundStyle: BackgroundStyle = BackgroundStyle(rawValue: bgString) ?? .black70
             
             if let legacyMode = modeString.isEmpty ? nil : FocusMode(rawValue: modeString) {
                 mode = legacyMode
@@ -81,17 +111,18 @@ struct FocusConfiguration {
                     mode = .rectangle
                     size = .medium
                 default:
-                    // Default for new users: Circle + Medium
+                    // Default for new users: Circle + Medium + Black 70%
                     mode = .circle
                     size = .medium
                 }
             }
             
-            return FocusConfiguration(mode: mode, size: size)
+            return FocusConfiguration(mode: mode, size: size, backgroundStyle: backgroundStyle)
         }
         set {
             userDefaults.set(newValue.mode.rawValue, forKey: focusModeKey)
             userDefaults.set(newValue.size.rawValue, forKey: focusSizeKey)
+            userDefaults.set(newValue.backgroundStyle.rawValue, forKey: backgroundStyleKey)
         }
     }
     

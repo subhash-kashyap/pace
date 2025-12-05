@@ -31,6 +31,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var flashMenuItem: NSMenuItem?
     private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
     private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
+    private var backgroundStyleMenuItems: [BackgroundStyle: NSMenuItem] = [:]
     private var flashTimer: Timer?
     private var lastFlashTime: Date?
     
@@ -154,6 +155,21 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         sizeMenuItem.submenu = sizeMenu
         menu.addItem(sizeMenuItem)
         
+        // Add background style selector submenu
+        let bgMenu = NSMenu()
+        backgroundStyleMenuItems.removeAll()
+        for bgStyle in BackgroundStyle.allCases {
+            let bgItem = NSMenuItem(title: bgStyle.displayName, action: #selector(selectBackgroundStyle(_:)), keyEquivalent: "")
+            bgItem.representedObject = bgStyle
+            bgItem.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
+            backgroundStyleMenuItems[bgStyle] = bgItem
+            bgMenu.addItem(bgItem)
+        }
+        
+        let bgMenuItem = NSMenuItem(title: "BG", action: nil, keyEquivalent: "")
+        bgMenuItem.submenu = bgMenu
+        menu.addItem(bgMenuItem)
+        
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
         menu.addItem(focusMenuItem!)
@@ -254,15 +270,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
+    func updateBackgroundStyleMenu() {
+        for (bgStyle, item) in backgroundStyleMenuItems {
+            item.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
+        }
+    }
+    
+    @objc func selectBackgroundStyle(_ sender: NSMenuItem) {
+        guard let bgStyle = sender.representedObject as? BackgroundStyle else { return }
+        
+        focusConfiguration.backgroundStyle = bgStyle
+        FocusConfiguration.current = focusConfiguration
+        
+        // Show overlay if it's hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
+        updateBackgroundStyleMenu()
+    }
+    
     func updateMenuState(overlayVisible: Bool) {
         if overlayVisible {
             // Overlay is visible - uncheck "Turn Off", check the active mode
             toggleMenuItem?.state = .off
-            statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.on.fill", accessibilityDescription: "Pace On")
         } else {
             // Overlay is hidden - check "Turn Off", uncheck all modes
             toggleMenuItem?.state = .on
-            statusItem?.button?.image = NSImage(systemSymbolName: "flashlight.off.fill", accessibilityDescription: "Pace Off")
         }
         updateFocusModeMenu()
     }
@@ -295,13 +332,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func updateModeMenusEnabled(enabled: Bool) {
-        // Mode and size menu items are always enabled now
-        // Users can click them to both show overlay and change mode in one action
+        // Mode, size, and background menu items are always enabled now
+        // Users can click them to both show overlay and change settings in one action
         for (_, item) in focusModeMenuItems {
             item.isEnabled = true
         }
         
         for (_, item) in focusSizeMenuItems {
+            item.isEnabled = true
+        }
+        
+        for (_, item) in backgroundStyleMenuItems {
             item.isEnabled = true
         }
     }
@@ -456,12 +497,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Show overlay for the first time (only on initial onboarding)
         if overlayWindow?.isVisible != true && !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
-            // Set default to Circle mode with Medium size
+            // Set default to Circle mode with Medium size and Black 70% background
             focusConfiguration.mode = .circle
             focusConfiguration.size = .medium
+            focusConfiguration.backgroundStyle = .black70
             FocusConfiguration.current = focusConfiguration
             updateFocusModeMenu()
             updateFocusSizeMenu()
+            updateBackgroundStyleMenu()
             
             overlayWindow?.orderFront(nil)
             overlayShownTime = Date()

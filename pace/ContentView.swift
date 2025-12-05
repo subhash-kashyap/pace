@@ -22,9 +22,9 @@ struct OverlayContentView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Make background very opaque and remove the grid overlay
+                // Use the selected background style
                 Rectangle()
-                    .fill(Color.black.opacity(0.99))
+                    .fill(appDelegate.focusConfiguration.backgroundStyle.color)
                     .mask(
                         Rectangle()
                             .overlay(
@@ -50,6 +50,7 @@ struct OverlayContentView: View {
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseX)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.mode)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.size)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.backgroundStyle)
                 
                 // GridOverlay removed
             }
