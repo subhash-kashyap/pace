@@ -23,9 +23,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var focusWindow: FocusWindow?
     var flashWindow: FlashWindow?
     var onboardingWindow: OnboardingWindow?
+    var sidePanelWindow: SidePanelWindow?
     var statusItem: NSStatusItem?
     
     @Published var isOnboardingActive: Bool = false
+    @Published var isSidePanelExpanded: Bool = false
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var flashMenuItem: NSMenuItem?
@@ -67,6 +69,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         overlayWindow = OverlayWindow(appDelegate: self)
         focusWindow = FocusWindow(appDelegate: self)
         flashWindow = FlashWindow()
+        sidePanelWindow = SidePanelWindow(appDelegate: self)
         
         // Check if user has seen onboarding
         let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
@@ -95,6 +98,9 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             )
             AnalyticsManager.shared.trackPaceViewShown()
         }
+        
+        // Always show side panel (collapsed by default)
+        sidePanelWindow?.orderFront(nil)
     }
     
     func applicationWillTerminate(_ notification: Notification) {
@@ -208,7 +214,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     @objc func selectFocusMode(_ sender: NSMenuItem) {
         guard let mode = sender.representedObject as? FocusMode else { return }
-        
+        applyFocusMode(mode)
+    }
+    
+    func applyFocusMode(_ mode: FocusMode) {
         // Track mode change
         AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
         
@@ -233,7 +242,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     @objc func selectFocusSize(_ sender: NSMenuItem) {
         guard let size = sender.representedObject as? FocusSize else { return }
-        
+        applyFocusSize(size)
+    }
+    
+    func applyFocusSize(_ size: FocusSize) {
         // Track size change (as a mode update)
         AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
         
@@ -278,7 +290,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     @objc func selectBackgroundStyle(_ sender: NSMenuItem) {
         guard let bgStyle = sender.representedObject as? BackgroundStyle else { return }
-        
+        applyBackgroundStyle(bgStyle)
+    }
+    
+    func applyBackgroundStyle(_ bgStyle: BackgroundStyle) {
         focusConfiguration.backgroundStyle = bgStyle
         FocusConfiguration.current = focusConfiguration
         
@@ -532,6 +547,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     @objc func quitApp() {
         NSApplication.shared.terminate(nil)
     }
+    
+    func toggleSidePanel() {
+        isSidePanelExpanded.toggle()
+    }
+    
+    func collapseSidePanel() {
+        isSidePanelExpanded = false
+    }
 }
 
 class OverlayWindow: NSWindow {
@@ -630,6 +653,351 @@ class FlashWindow: NSWindow {
         
         // Initialize with FlashBorderView
         self.contentView = NSHostingView(rootView: FlashBorderView(onComplete: {}))
+    }
+}
+
+class SidePanelWindow: NSWindow {
+    weak var appDelegate: AppDelegate?
+    
+    convenience init(appDelegate: AppDelegate) {
+        // Position at right edge, vertically centered
+        // Use small dimensions for collapsed state, will expand when needed
+        let collapsedWidth: CGFloat = 20  // Small width for collapsed bar
+        let collapsedHeight: CGFloat = 100  // Height for collapsed bar
+        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        // Window covers full height but positioned at right edge
+        // Content will be centered vertically via VStack spacers
+        let windowRect = CGRect(x: screenRect.maxX - 270, y: 0, width: 270, height: screenRect.height)
+        
+        self.init(
+            contentRect: windowRect,
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        self.appDelegate = appDelegate
+        
+        // CRITICAL: Use mainMenu level (highest) to be above .screenSaver overlay
+        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = true
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        
+        self.contentView = NSHostingView(rootView: SidePanelView(appDelegate: appDelegate))
+    }
+    
+    override var canBecomeKey: Bool {
+        return true
+    }
+}
+
+struct SidePanelView: View {
+    @ObservedObject var appDelegate: AppDelegate
+    
+    var body: some View {
+        VStack {
+            Spacer()  // Push to vertical center
+            
+            HStack(spacing: 0) {
+                Spacer()
+                
+                if appDelegate.isSidePanelExpanded {
+                    ExpandedSidePanel(appDelegate: appDelegate)
+                        .transition(.move(edge: .trailing))
+                } else {
+                    CollapsedSidePanel(appDelegate: appDelegate)
+                        .transition(.move(edge: .trailing))
+                }
+            }
+            
+            Spacer()  // Push to vertical center
+        }
+        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: appDelegate.isSidePanelExpanded)
+    }
+}
+
+struct CollapsedSidePanel: View {
+    @ObservedObject var appDelegate: AppDelegate
+    
+    // Determine bar color based on background style
+    private var barColor: Color {
+        switch appDelegate.focusConfiguration.backgroundStyle {
+        case .black, .black70:
+            return Color.white
+        case .white, .white70:
+            return Color.black
+        }
+    }
+    
+    var body: some View {
+        Button(action: {
+            appDelegate.toggleSidePanel()
+        }) {
+            RoundedRectangle(cornerRadius: 4)
+                .fill(barColor)
+                .frame(width: 8, height: 80)  // Doubled from 40 to 80
+        }
+        .buttonStyle(PlainButtonStyle())
+        .padding(.trailing, 4)
+    }
+}
+
+struct ExpandedSidePanel: View {
+    @ObservedObject var appDelegate: AppDelegate
+    @State private var showSizeSubmenu: Bool = false
+    @State private var showBGSubmenu: Bool = false
+    
+    var body: some View {
+        GeometryReader { geometry in
+            VStack {
+                Spacer()  // Center vertically
+                
+                VStack(alignment: .leading, spacing: 0) {
+                // Header with close button
+                HStack {
+                    Text("Pace")
+                        .font(.system(size: 16, weight: .semibold))
+                        .foregroundColor(.white)
+                    Spacer()
+                    Button(action: {
+                        appDelegate.collapseSidePanel()
+                    }) {
+                        Image(systemName: "xmark.circle.fill")
+                            .foregroundColor(.white.opacity(0.6))
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                .padding(.horizontal, 12)
+                .padding(.vertical, 10)
+                
+                Divider()
+                    .background(Color.white.opacity(0.2))
+                
+                // ScrollView with max height of 40% screen height
+                ScrollView {
+                    VStack(alignment: .leading, spacing: 2) {
+                        // Turn Off button
+                        SidePanelButton(
+                            title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
+                            isChecked: appDelegate.overlayWindow?.isVisible != true
+                        ) {
+                            appDelegate.toggleOverlay()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                    
+                    // Focus Modes
+                    ForEach(FocusMode.allCases, id: \.self) { mode in
+                        SidePanelButton(
+                            title: mode.displayName,
+                            isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true
+                        ) {
+                            appDelegate.applyFocusMode(mode)
+                            appDelegate.collapseSidePanel()
+                        }
+                    }
+                    
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                            // Size collapsible submenu
+                        Button(action: {
+                            withAnimation {
+                                showSizeSubmenu.toggle()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: showSizeSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .frame(width: 12)
+                                Text("Size")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    
+                        if showSizeSubmenu {
+                            ForEach(FocusSize.allCases, id: \.self) { size in
+                                SidePanelButton(
+                                    title: size.displayName,
+                                    isChecked: size == appDelegate.focusConfiguration.size,
+                                    isIndented: true
+                                ) {
+                                    appDelegate.applyFocusSize(size)
+                                    appDelegate.collapseSidePanel()
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                        // Background collapsible submenu
+                        Button(action: {
+                            withAnimation {
+                                showBGSubmenu.toggle()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: showBGSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .frame(width: 12)
+                                Text("BG")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                    
+                        if showBGSubmenu {
+                            ForEach(BackgroundStyle.allCases, id: \.self) { bgStyle in
+                                SidePanelButton(
+                                    title: bgStyle.displayName,
+                                    isChecked: bgStyle == appDelegate.focusConfiguration.backgroundStyle,
+                                    isIndented: true
+                                ) {
+                                    appDelegate.applyBackgroundStyle(bgStyle)
+                                    appDelegate.collapseSidePanel()
+                                }
+                            }
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                        // Focus Message
+                        SidePanelButton(
+                            title: "Show Focus Message",
+                            isChecked: false
+                        ) {
+                            appDelegate.toggleFocusMode()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                        // Flash
+                        SidePanelButton(
+                            title: appDelegate.isFlashModeActive ? "Flash (Active)" : "Flash",
+                            isChecked: appDelegate.isFlashModeActive
+                        ) {
+                            appDelegate.toggleFlashMode()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                        // Extras
+                        SidePanelButton(
+                            title: "How to Use",
+                            isChecked: false
+                        ) {
+                            appDelegate.showOnboarding()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
+                        SidePanelButton(
+                            title: "Check for Updates...",
+                            isChecked: false
+                        ) {
+                            appDelegate.checkForUpdates()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
+                        // Quit
+                        SidePanelButton(
+                            title: "Quit Pace",
+                            isChecked: false
+                        ) {
+                            appDelegate.quitApp()
+                        }
+                    }
+                    .padding(.vertical, 6)
+                }
+                .frame(maxHeight: geometry.size.height * 0.32)  // Max 32% of screen height - requires scroll for Quit
+                }
+                .frame(width: 220)
+                .background(
+                    RoundedRectangle(cornerRadius: 12)
+                        .fill(Color.black.opacity(0.85))
+                        .shadow(color: .black.opacity(0.3), radius: 10, x: -2, y: 2)
+                )
+                .padding(.trailing, 8)
+                
+                Spacer()  // Center vertically
+            }
+            .frame(maxWidth: .infinity, maxHeight: .infinity)
+        }
+    }
+}
+
+struct SidePanelButton: View {
+    let title: String
+    let isChecked: Bool
+    var isIndented: Bool = false
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            HStack {
+                if isChecked {
+                    Image(systemName: "checkmark")
+                        .font(.system(size: 10))
+                        .foregroundColor(.white)
+                        .frame(width: 12)
+                } else {
+                    Color.clear.frame(width: 12)
+                }
+                
+                Text(title)
+                    .font(.system(size: 13))
+                    .foregroundColor(.white)
+                
+                Spacer()
+            }
+            .padding(.horizontal, isIndented ? 24 : 12)
+            .padding(.vertical, 5)
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(PlainButtonStyle())
+        .background(
+            Color.white.opacity(0.0)
+        )
+        .onHover { isHovered in
+            if isHovered {
+                NSCursor.pointingHand.push()
+            } else {
+                NSCursor.pop()
+            }
+        }
     }
 }
 
