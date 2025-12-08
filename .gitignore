@@ -3,6 +3,8 @@
 
 # macOS
 .DS_Store
+**/xcuserdata/
+**/*.xcuserstate
 
 # Xcode
 *.xcodeproj

@@ -73,19 +73,20 @@ struct SimpleVideoPlayer: NSViewRepresentable {
         
         print("▶️ Player started")
         
-        // Loop
-        NotificationCenter.default.addObserver(
+        
+        // Loop - store observer in coordinator for proper cleanup
+        let loopObserver = NotificationCenter.default.addObserver(
             forName: .AVPlayerItemDidPlayToEndTime,
             object: player.currentItem,
             queue: .main
         ) { _ in
-            print("🔄 Video ended, looping")
             player.seek(to: .zero)
             player.play()
         }
         
         context.coordinator.player = player
         context.coordinator.playerLayer = playerLayer
+        context.coordinator.loopObserver = loopObserver
         
         return view
     }
@@ -109,5 +110,14 @@ struct SimpleVideoPlayer: NSViewRepresentable {
     class Coordinator {
         var player: AVPlayer?
         var playerLayer: AVPlayerLayer?
+        var loopObserver: NSObjectProtocol?
+        
+        deinit {
+            // Clean up observer when coordinator is deallocated
+            if let observer = loopObserver {
+                NotificationCenter.default.removeObserver(observer)
+            }
+            player?.pause()
+        }
     }
 }

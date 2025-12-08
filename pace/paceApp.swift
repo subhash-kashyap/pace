@@ -1,6 +1,7 @@
 import SwiftUI
 import AppKit
 import Sparkle
+import Carbon
 
 @main
 struct PaceApp: App {
@@ -18,139 +19,139 @@ struct PaceApp: App {
     }
 }
 
-// MARK: - Global Hotkey Manager (CGEventTap)
+// MARK: - Global Hotkey Manager (Carbon API)
 class GlobalHotkeyManager {
     weak var appDelegate: AppDelegate?
-    private var eventTap: CFMachPort?
-    private var runLoopSource: CFRunLoopSource?
-    private var permissionCheckTimer: Timer?
     
-    init?(appDelegate: AppDelegate) {
+    // IDs for our hotkeys
+    private enum HotkeyID: UInt32 {
+        case cycleMode = 1
+        case cycleSize = 2
+        case turnOff = 3
+        case toggleFocus = 4
+        case cycleBackground = 5
+    }
+    
+    // Helper to store event handler reference
+    private var eventHandler: EventHandlerRef?
+    
+    init(appDelegate: AppDelegate) {
         self.appDelegate = appDelegate
-        
-        if !setupEventTap(appDelegate: appDelegate) {
-            // Failed to create tap - start polling for permission
-            startPermissionPolling(appDelegate: appDelegate)
-            return nil
-        }
+        setupHotkeys()
     }
     
-    private func setupEventTap(appDelegate: AppDelegate) -> Bool {
-        // Create event tap for keyDown events
-        let eventMask = CGEventMask(1 << CGEventType.keyDown.rawValue)
+    private func setupHotkeys() {
+        // Define hotkeys
+        // Common modifiers: cmdKey, shiftKey, optionKey, controlKey
+        let modifiers = UInt32(optionKey | controlKey)
         
-        // Create the event tap
-        guard let tap = CGEvent.tapCreate(
-            tap: .cgSessionEventTap,
-            place: .headInsertEventTap,
-            options: .defaultTap,
-            eventsOfInterest: eventMask,
-            callback: { (proxy, type, event, refcon) -> Unmanaged<CGEvent>? in
-                guard type == .keyDown else {
-                    return Unmanaged.passRetained(event)
-                }
-                
-                // Get the AppDelegate from refcon
-                let appDelegate = Unmanaged<AppDelegate>.fromOpaque(refcon!).takeUnretainedValue()
-                
-                let keyCode = event.getIntegerValueField(.keyboardEventKeycode)
-                let flags = event.flags
-                
-                let hasCtrl = flags.contains(.maskControl)
-                let hasOpt = flags.contains(.maskAlternate)
-                
-                // Check for ⌃⌥ combination
-                if hasCtrl && hasOpt {
-                    switch keyCode {
-                    case 31: // ⌃⌥O - Cycle focus modes
-                        print("🎹 ⌃⌥O Cycling focus mode")
-                        DispatchQueue.main.async {
-                            appDelegate.cycleNextFocusMode()
-                        }
-                        return nil // Swallow event
-                    case 35: // ⌃⌥P - Cycle sizes
-                        print("🎹 ⌃⌥P Cycling size")
-                        DispatchQueue.main.async {
-                            appDelegate.cycleNextFocusSize()
-                        }
-                        return nil // Swallow event
-                    case 37: // ⌃⌥L - Turn off overlay
-                        print("🎹 ⌃⌥L Turning off overlay")
-                        DispatchQueue.main.async {
-                            appDelegate.turnOffOverlay()
-                        }
-                        return nil // Swallow event
-                    case 3: // ⌃⌥F - Toggle focus message
-                        print("🎹 ⌃⌥F Toggling focus message")
-                        DispatchQueue.main.async {
-                            appDelegate.toggleFocusMode()
-                        }
-                        return nil // Swallow event
-                    default:
-                        break
-                    }
-                }
-                
-                // Pass through all other events
-                return Unmanaged.passRetained(event)
-            },
-            userInfo: Unmanaged.passUnretained(appDelegate).toOpaque()
-        ) else {
-            print("❌ Failed to create CGEventTap - Input Monitoring permission required")
-            return false
-        }
+        // ⌃⌥O - Cycle focus modes (KeyCode 31)
+        register(id: .cycleMode, keyCode: 31, modifiers: modifiers)
         
-        self.eventTap = tap
+        // ⌃⌥P - Cycle sizes (KeyCode 35)
+        register(id: .cycleSize, keyCode: 35, modifiers: modifiers)
         
-        // Create run loop source and add to current run loop
-        let source = CFMachPortCreateRunLoopSource(kCFAllocatorDefault, tap, 0)
-        self.runLoopSource = source
+        // ⌃⌥K - Turn off overlay (KeyCode 40)
+        register(id: .turnOff, keyCode: 40, modifiers: modifiers)
         
-        CFRunLoopAddSource(CFRunLoopGetCurrent(), source, .commonModes)
-        CGEvent.tapEnable(tap: tap, enable: true)
+        // ⌃⌥L - Cycle background (KeyCode 37)
+        register(id: .cycleBackground, keyCode: 37, modifiers: modifiers)
         
-        print("✅ Global hotkey manager initialized with CGEventTap")
-        return true
-    }
-    
-    private func startPermissionPolling(appDelegate: AppDelegate) {
-        print("🔄 Starting permission polling - will auto-enable when granted")
+        // ⌃⌥F - Focus message (KeyCode 3)
+        register(id: .toggleFocus, keyCode: 3, modifiers: modifiers)
         
-        // Poll every 2 seconds to check if permission was granted
-        permissionCheckTimer = Timer.scheduledTimer(withTimeInterval: 2.0, repeats: true) { [weak self] _ in
-            guard let self = self else { return }
+        // Install event handler
+        let eventSpec = [
+            EventTypeSpec(eventClass: OSType(kEventClassKeyboard), eventKind: UInt32(kEventHotKeyPressed))
+        ]
+        
+        // Use a C closure for the callback
+        // We need to pass 'self' as userData to access instance methods
+        let selfPointer = Unmanaged.passUnretained(self).toOpaque()
+        
+        InstallEventHandler(GetApplicationEventTarget(), { (handler, event, userData) -> OSStatus in
+            // Reconstruct 'self' from userData
+            guard let userData = userData else { return noErr }
+            let manager = Unmanaged<GlobalHotkeyManager>.fromOpaque(userData).takeUnretainedValue()
             
-            // Try to create the event tap
-            if self.setupEventTap(appDelegate: appDelegate) {
-                print("✅ Permission granted! Hotkeys now active.")
-                self.permissionCheckTimer?.invalidate()
-                self.permissionCheckTimer = nil
+            return manager.handleEvent(event: event)
+        }, 1, eventSpec, selfPointer, &eventHandler)
+        
+        print("✅ Global hotkey manager initialized with Carbon API")
+    }
+    
+    private func register(id: HotkeyID, keyCode: UInt32, modifiers: UInt32) {
+        var hotKeyRef: EventHotKeyRef?
+        let hotKeyID = EventHotKeyID(signature: OSType(0x50414345), id: id.rawValue) // PACE signature
+        
+        let status = RegisterEventHotKey(
+            keyCode,
+            modifiers,
+            hotKeyID,
+            GetApplicationEventTarget(),
+            0,
+            &hotKeyRef
+        )
+        
+        if status != noErr {
+            print("❌ Failed to register hotkey ID: \(id)")
+        }
+    }
+    
+    private func handleEvent(event: EventRef?) -> OSStatus {
+        guard let event = event else { return noErr }
+        
+        var hotKeyID = EventHotKeyID()
+        let status = GetEventParameter(
+            event,
+            EventParamName(kEventParamDirectObject),
+            EventParamType(typeEventHotKeyID),
+            nil,
+            MemoryLayout<EventHotKeyID>.size,
+            nil,
+            &hotKeyID
+        )
+        
+        guard status == noErr else { return status }
+        
+        // Check our signature
+        guard hotKeyID.signature == OSType(0x50414345) else { return noErr }
+        
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self, let appDelegate = self.appDelegate else { return }
+            
+            switch HotkeyID(rawValue: hotKeyID.id) {
+            case .cycleMode:
+                print("🎹 ⌃⌥O Cycling focus mode")
+                appDelegate.cycleNextFocusMode()
                 
-                // Notify user
-                DispatchQueue.main.async {
-                    self.showHotkeysEnabledNotification()
-                }
+            case .cycleSize:
+                print("🎹 ⌃⌥P Cycling size")
+                appDelegate.cycleNextFocusSize()
+                
+            case .turnOff:
+                print("🎹 ⌃⌥K Turning off overlay")
+                appDelegate.turnOffOverlay()
+                
+            case .cycleBackground:
+                print("🎹 ⌃⌥L Cycling background")
+                appDelegate.cycleBackgroundStyle()
+                
+            case .toggleFocus:
+                print("🎹 ⌃⌥F Toggling focus message")
+                appDelegate.toggleFocusMode()
+                
+            case .none:
+                break
             }
         }
-    }
-    
-    private func showHotkeysEnabledNotification() {
-        let alert = NSAlert()
-        alert.messageText = "Global Hotkeys Enabled! 🎉"
-        alert.informativeText = "You can now use keyboard shortcuts from any app:\n\n⌃⌥O - Cycle modes\n⌃⌥P - Cycle sizes\n⌃⌥L - Turn off\n⌃⌥F - Focus message"
-        alert.alertStyle = .informational
-        alert.addButton(withTitle: "Got it!")
-        alert.runModal()
+        
+        return noErr
     }
     
     deinit {
-        permissionCheckTimer?.invalidate()
-        if let tap = eventTap {
-            CGEvent.tapEnable(tap: tap, enable: false)
-            CFMachPortInvalidate(tap)
-        }
-        if let source = runLoopSource {
-            CFRunLoopRemoveSource(CFRunLoopGetCurrent(), source, .commonModes)
+        if let handler = eventHandler {
+            RemoveEventHandler(handler)
         }
     }
 }
@@ -202,28 +203,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Load saved configuration
         focusConfiguration = FocusConfiguration.current
         
-        // Initialize global hotkey manager (CGEventTap)
+        // Initialize global hotkey manager (Carbon - No permission needed!)
         hotkeyManager = GlobalHotkeyManager(appDelegate: self)
-        if hotkeyManager == nil {
-            print("⚠️ Hotkey manager failed to initialize - waiting for Input Monitoring permission")
-            
-            // Show helpful alert
-            DispatchQueue.main.asyncAfter(deadline: .now() + 0.5) {
-                let alert = NSAlert()
-                alert.messageText = "Enable Global Hotkeys"
-                alert.informativeText = "Pace needs your permission for keyboard shortcuts \n\n⌃ + ⌥ + O - Different modes\n⌃ + ⌥ + P - Different sizes\n⌃ + ⌥ + L - Turn off\n⌃ + ⌥ + F - Focus message\n"
-                alert.alertStyle = .informational
-                alert.addButton(withTitle: "Open System Settings")
-                alert.addButton(withTitle: "Later")
-                
-                let response = alert.runModal()
-                if response == .alertFirstButtonReturn {
-                    if let url = URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_InputMonitoring") {
-                        NSWorkspace.shared.open(url)
-                    }
-                }
-            }
-        }
         
         setupMenuBar()
         
@@ -262,6 +243,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Always show side panel (collapsed by default)
         sidePanelWindow?.orderFront(nil)
+    }
+
+    func initializeHotkeyManager() {
+        // No-op for now, kept for compatibility if needed, but we init in didFinishLaunching now
     }
     
     func applicationWillTerminate(_ notification: Notification) {
@@ -311,7 +296,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Add "Turn Off" as first option
         toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
-        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌥L")
+        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌥K")
         toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
         menu.addItem(toggleMenuItem!)
         
@@ -351,8 +336,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         // Add background style selector submenu
         let bgMenu = NSMenu()
         backgroundStyleMenuItems.removeAll()
-        for bgStyle in BackgroundStyle.allCases {
+        for (index, bgStyle) in BackgroundStyle.allCases.enumerated() {
             let bgItem = NSMenuItem(title: bgStyle.displayName, action: #selector(selectBackgroundStyle(_:)), keyEquivalent: "")
+            if index == 0 {
+                bgItem.attributedTitle = createMenuTitle(bgStyle.displayName, shortcut: "⌃⌥L")
+            }
             bgItem.representedObject = bgStyle
             bgItem.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
             backgroundStyleMenuItems[bgStyle] = bgItem
@@ -548,6 +536,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         for (_, item) in backgroundStyleMenuItems {
             item.isEnabled = true
         }
+    }
+    
+    func cycleBackgroundStyle() {
+        // Show overlay if hidden
+        if overlayWindow?.isVisible != true {
+            overlayShownTime = Date()
+            AnalyticsManager.shared.trackPaceViewShown()
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        
+        // Get next bg style in cycle
+        let allStyles = BackgroundStyle.allCases
+        guard let currentIndex = allStyles.firstIndex(of: focusConfiguration.backgroundStyle) else { return }
+        let nextIndex = (currentIndex + 1) % allStyles.count
+        let nextStyle = allStyles[nextIndex]
+        
+        applyBackgroundStyle(nextStyle)
     }
     
     // MARK: - Keyboard Hotkey Methods
@@ -779,6 +785,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
+    // Check for updates...
     @objc func checkForUpdates() {
         updaterController?.checkForUpdates(nil)
     }
@@ -1023,7 +1030,7 @@ struct ExpandedSidePanel: View {
                         SidePanelButton(
                             title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
                             isChecked: appDelegate.overlayWindow?.isVisible != true,
-                            shortcut: "⌃⌥L"
+                            shortcut: "⌃⌥K"
                         ) {
                             appDelegate.toggleOverlay()
                             appDelegate.collapseSidePanel()
@@ -1112,11 +1119,12 @@ struct ExpandedSidePanel: View {
                         .buttonStyle(PlainButtonStyle())
                     
                         if showBGSubmenu {
-                            ForEach(BackgroundStyle.allCases, id: \.self) { bgStyle in
+                            ForEach(Array(BackgroundStyle.allCases.enumerated()), id: \.element) { index, bgStyle in
                                 SidePanelButton(
                                     title: bgStyle.displayName,
                                     isChecked: bgStyle == appDelegate.focusConfiguration.backgroundStyle,
-                                    isIndented: true
+                                    isIndented: true,
+                                    shortcut: index == 0 ? "⌃⌥L" : nil
                                 ) {
                                     appDelegate.applyBackgroundStyle(bgStyle)
                                     appDelegate.collapseSidePanel()
