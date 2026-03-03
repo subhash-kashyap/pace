@@ -133,15 +133,16 @@ Visual reminder system:
 
 **Hotkey System**
 - Works system-wide (even when other apps are focused)
-- Modifier combination: Control + Option (macOS) / Ctrl + Alt (Windows/Linux)
+- Modifier combination: Command + Control (macOS) / Ctrl + Alt (Windows/Linux)
 - **NO PERMISSIONS REQUIRED** (uses standard hotkey registration)
 
 **Shortcuts**
-- **⌃⌥O** (Ctrl+Alt+O): Cycle focus modes (Rectangle → Square → Center Column → Circle → repeat)
-- **⌃⌥P** (Ctrl+Alt+P): Cycle sizes (S → M → L → repeat)
-- **⌃⌥K** (Ctrl+Alt+K): Turn overlay off
-- **⌃⌥L** (Ctrl+Alt+L): Cycle background styles (Black → Black 70% → White → White 70% → repeat)
-- **⌃⌥F** (Ctrl+Alt+F): Toggle focus message window
+- **⌃⌘J**: Cycle focus modes (Rectangle → Square → Center Column → Circle → repeat)
+- **⌃⌘O**: Set focus mode to Circle
+- **⌃⌘L**: Cycle sizes (S → M → L → repeat)
+- **⌃⌘K**: Toggle overlay on/off
+- **⌃⌘I**: Cycle background styles (Black → Black 70% → White → White 70% → repeat)
+- **⌃⌘F**: Toggle focus message window
 
 **Implementation Requirements**
 - **macOS**: Use Carbon API `RegisterEventHotKey` (NO Input Monitoring permission needed)
@@ -174,11 +175,11 @@ Visual reminder system:
 - Auto-collapses after selection
 
 **Content**
-- Turn On/Off (with ⌃⌥K shortcut)
-- Focus modes (Rectangle, Square, Center Column, Circle) - first shows ⌃⌥O
-- Size submenu (S, M, L) - first shows ⌃⌥P
-- Background submenu (Black, Black 70%, White, White 70%) - first shows ⌃⌥L
-- Show Focus Message (with ⌃⌥F shortcut)
+- Turn On/Off (with ⌃⌘K shortcut)
+- Focus modes (Rectangle, Square, Center Column, Circle) - Circle shows ⌃⌘O, Rectangle ⌃⌘J
+- Size submenu (S, M, L) - first shows ⌃⌘L
+- Background submenu (Black, Black 70%, White, White 70%) - first shows ⌃⌘I
+- Show Focus Message (with ⌃⌘F shortcut)
 - Flash toggle
 - How to Use
 - Check for Updates (desktop only)
@@ -192,23 +193,23 @@ Visual reminder system:
 
 **Menu Structure**
 ```
-Turn Off                    ⌃⌥K
-Rectangle                   ⌃⌥O
+Turn Off                    ⌃⌘K
+Rectangle                   ⌃⌘J
 Square
 Center Column
-Circle
+Circle                      ⌃⌘O
 ─────────────────────────────────
 Size                           >
-  S                         ⌃⌥P
+  S                         ⌃⌘L
   M
   L
 BG                             >
-  Black                     ⌃⌥L
+  Black                     ⌃⌘I
   Black 70%
   White
   White 70%
 ─────────────────────────────────
-Show Focus Message          ⌃⌥F
+Show Focus Message          ⌃⌘F
 ─────────────────────────────────
 Flash
 ─────────────────────────────────
@@ -583,7 +584,21 @@ SUScheduledCheckInterval: 86400 (desktop only)
 
 ## Version History
 
-### 1.0.3 (Current)
+### 1.0.5 (Current)
+- Updated global shortcuts to use Command + Control (⌃⌘)
+- New shortcut layout:
+  - ⌃⌘I: Cycle background (brightness/color)
+  - ⌃⌘L: Cycle sizes
+  - ⌃⌘O: Set to Circle
+  - ⌃⌘J: Cycle focus modes
+- Added scripts directory to gitignore
+- Created terminal run script (./scripts/run.sh)
+
+### 1.0.4
+- Switched main shortcut key from Control to Command (⌥⌘)
+- Made ⌥⌘K a toggle for turning overlay on and off
+
+### 1.0.3
 - Switched to Carbon hotkeys (NO permissions needed!)
 - Updated keyboard shortcuts (K for off, L for background)
 - Fixed video looping memory leak

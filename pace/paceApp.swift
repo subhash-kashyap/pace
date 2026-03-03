@@ -27,9 +27,10 @@ class GlobalHotkeyManager {
     private enum HotkeyID: UInt32 {
         case cycleMode = 1
         case cycleSize = 2
-        case turnOff = 3
+        case toggleOverlay = 3
         case toggleFocus = 4
         case cycleBackground = 5
+        case setCircle = 6
     }
     
     // Helper to store event handler reference
@@ -43,21 +44,24 @@ class GlobalHotkeyManager {
     private func setupHotkeys() {
         // Define hotkeys
         // Common modifiers: cmdKey, shiftKey, optionKey, controlKey
-        let modifiers = UInt32(optionKey | controlKey)
+        let modifiers = UInt32(controlKey | cmdKey)
         
-        // ⌃⌥O - Cycle focus modes (KeyCode 31)
-        register(id: .cycleMode, keyCode: 31, modifiers: modifiers)
+        // ⌃⌘J - Cycle focus modes (KeyCode 38)
+        register(id: .cycleMode, keyCode: 38, modifiers: modifiers)
         
-        // ⌃⌥P - Cycle sizes (KeyCode 35)
-        register(id: .cycleSize, keyCode: 35, modifiers: modifiers)
+        // ⌃⌘O - Set to Circle (KeyCode 31)
+        register(id: .setCircle, keyCode: 31, modifiers: modifiers)
         
-        // ⌃⌥K - Turn off overlay (KeyCode 40)
-        register(id: .turnOff, keyCode: 40, modifiers: modifiers)
+        // ⌃⌘L - Cycle sizes (KeyCode 37)
+        register(id: .cycleSize, keyCode: 37, modifiers: modifiers)
         
-        // ⌃⌥L - Cycle background (KeyCode 37)
-        register(id: .cycleBackground, keyCode: 37, modifiers: modifiers)
+        // ⌃⌘K - Toggle overlay (KeyCode 40)
+        register(id: .toggleOverlay, keyCode: 40, modifiers: modifiers)
         
-        // ⌃⌥F - Focus message (KeyCode 3)
+        // ⌃⌘I - Cycle background (KeyCode 34)
+        register(id: .cycleBackground, keyCode: 34, modifiers: modifiers)
+        
+        // ⌃⌘F - Focus message (KeyCode 3)
         register(id: .toggleFocus, keyCode: 3, modifiers: modifiers)
         
         // Install event handler
@@ -122,23 +126,27 @@ class GlobalHotkeyManager {
             
             switch HotkeyID(rawValue: hotKeyID.id) {
             case .cycleMode:
-                print("🎹 ⌃⌥O Cycling focus mode")
+                print("🎹 ⌃⌘J Cycling focus mode")
                 appDelegate.cycleNextFocusMode()
                 
+            case .setCircle:
+                print("🎹 ⌃⌘O Setting mode to Circle")
+                appDelegate.applyFocusMode(.circle)
+                
             case .cycleSize:
-                print("🎹 ⌃⌥P Cycling size")
+                print("🎹 ⌃⌘L Cycling size")
                 appDelegate.cycleNextFocusSize()
                 
-            case .turnOff:
-                print("🎹 ⌃⌥K Turning off overlay")
-                appDelegate.turnOffOverlay()
+            case .toggleOverlay:
+                print("🎹 ⌃⌘K Toggling overlay")
+                appDelegate.toggleOverlay()
                 
             case .cycleBackground:
-                print("🎹 ⌃⌥L Cycling background")
+                print("🎹 ⌃⌘I Cycling background")
                 appDelegate.cycleBackgroundStyle()
                 
             case .toggleFocus:
-                print("🎹 ⌃⌥F Toggling focus message")
+                print("🎹 ⌃⌘F Toggling focus message")
                 appDelegate.toggleFocusMode()
                 
             case .none:
@@ -167,6 +175,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     @Published var isOnboardingActive: Bool = false
     @Published var isSidePanelExpanded: Bool = false
+    @Published var isOverlayVisible: Bool = false
     private var toggleMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var flashMenuItem: NSMenuItem?
@@ -242,6 +251,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
         
         // Always show side panel (collapsed by default)
+        sidePanelWindow?.updateLayout(isExpanded: false, animated: false)
         sidePanelWindow?.orderFront(nil)
     }
 
@@ -296,16 +306,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Add "Turn Off" as first option
         toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
-        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌥K")
+        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌘K")
         toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
         menu.addItem(toggleMenuItem!)
         
         // Add focus mode options
         focusModeMenuItems.removeAll()
-        for (index, mode) in FocusMode.allCases.enumerated() {
+        for mode in FocusMode.allCases {
             let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
-            if index == 0 {
-                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌥O")
+            if mode == .circle {
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘O")
+            } else if mode == .rectangle { // Rectangle is the first in allCases usually
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘J")
             }
             modeItem.representedObject = mode
             modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
@@ -321,7 +333,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         for (index, size) in FocusSize.allCases.enumerated() {
             let sizeItem = NSMenuItem(title: size.displayName, action: #selector(selectFocusSize(_:)), keyEquivalent: "")
             if index == 0 {
-                sizeItem.attributedTitle = createMenuTitle(size.displayName, shortcut: "⌃⌥P")
+                sizeItem.attributedTitle = createMenuTitle(size.displayName, shortcut: "⌃⌘L")
             }
             sizeItem.representedObject = size
             sizeItem.state = (size == focusConfiguration.size) ? .on : .off
@@ -339,7 +351,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         for (index, bgStyle) in BackgroundStyle.allCases.enumerated() {
             let bgItem = NSMenuItem(title: bgStyle.displayName, action: #selector(selectBackgroundStyle(_:)), keyEquivalent: "")
             if index == 0 {
-                bgItem.attributedTitle = createMenuTitle(bgStyle.displayName, shortcut: "⌃⌥L")
+                bgItem.attributedTitle = createMenuTitle(bgStyle.displayName, shortcut: "⌃⌘I")
             }
             bgItem.representedObject = bgStyle
             bgItem.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
@@ -353,7 +365,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
-        focusMenuItem?.attributedTitle = createMenuTitle("Show Focus Message", shortcut: "⌃⌥F")
+        focusMenuItem?.attributedTitle = createMenuTitle("Show Focus Message", shortcut: "⌃⌘F")
         menu.addItem(focusMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
@@ -485,6 +497,8 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func updateMenuState(overlayVisible: Bool) {
+        isOverlayVisible = overlayVisible
+
         if overlayVisible {
             // Overlay is visible - uncheck "Turn Off", check the active mode
             toggleMenuItem?.state = .off
@@ -796,10 +810,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     func toggleSidePanel() {
         isSidePanelExpanded.toggle()
+        sidePanelWindow?.updateLayout(isExpanded: isSidePanelExpanded, animated: true)
     }
     
     func collapseSidePanel() {
         isSidePanelExpanded = false
+        sidePanelWindow?.updateLayout(isExpanded: false, animated: true)
     }
 }
 
@@ -905,17 +921,18 @@ class FlashWindow: NSWindow {
 
 class SidePanelWindow: NSWindow {
     weak var appDelegate: AppDelegate?
+    private let expandedWidth: CGFloat = 270
+    private let collapsedWidth: CGFloat = 28
+    private let collapsedHeight: CGFloat = 120
     
     convenience init(appDelegate: AppDelegate) {
-        // Position at right edge, vertically centered
-        // Use small dimensions for collapsed state, will expand when needed
-        let collapsedWidth: CGFloat = 20  // Small width for collapsed bar
-        let collapsedHeight: CGFloat = 100  // Height for collapsed bar
         let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        
-        // Window covers full height but positioned at right edge
-        // Content will be centered vertically via VStack spacers
-        let windowRect = CGRect(x: screenRect.maxX - 270, y: 0, width: 270, height: screenRect.height)
+        let windowRect = CGRect(
+            x: screenRect.maxX - 28,
+            y: screenRect.midY - 60,
+            width: 28,
+            height: 120
+        )
         
         self.init(
             contentRect: windowRect,
@@ -926,14 +943,38 @@ class SidePanelWindow: NSWindow {
         
         self.appDelegate = appDelegate
         
-        // CRITICAL: Use mainMenu level (highest) to be above .screenSaver overlay
-        self.level = NSWindow.Level(rawValue: Int(CGWindowLevelForKey(.maximumWindow)))
+        // Keep this above the focus overlay without using the absolute max system level.
+        self.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         self.backgroundColor = .clear
         self.isOpaque = false
-        self.hasShadow = true
+        self.hasShadow = false
         self.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
         
         self.contentView = NSHostingView(rootView: SidePanelView(appDelegate: appDelegate))
+    }
+
+    func updateLayout(isExpanded: Bool, animated: Bool) {
+        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let targetFrame: CGRect
+
+        if isExpanded {
+            targetFrame = CGRect(
+                x: screenRect.maxX - expandedWidth,
+                y: 0,
+                width: expandedWidth,
+                height: screenRect.height
+            )
+        } else {
+            targetFrame = CGRect(
+                x: screenRect.maxX - collapsedWidth,
+                y: screenRect.midY - (collapsedHeight / 2),
+                width: collapsedWidth,
+                height: collapsedHeight
+            )
+        }
+
+        hasShadow = isExpanded
+        setFrame(targetFrame, display: true, animate: animated)
     }
     
     override var canBecomeKey: Bool {
@@ -1030,7 +1071,7 @@ struct ExpandedSidePanel: View {
                         SidePanelButton(
                             title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
                             isChecked: appDelegate.overlayWindow?.isVisible != true,
-                            shortcut: "⌃⌥K"
+                            shortcut: "⌃⌘K"
                         ) {
                             appDelegate.toggleOverlay()
                             appDelegate.collapseSidePanel()
@@ -1045,7 +1086,7 @@ struct ExpandedSidePanel: View {
                         SidePanelButton(
                             title: mode.displayName,
                             isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true,
-                            shortcut: index == 0 ? "⌃⌥O" : nil
+                            shortcut: mode == .circle ? "⌃⌘O" : (mode == .rectangle ? "⌃⌘J" : nil)
                         ) {
                             appDelegate.applyFocusMode(mode)
                             appDelegate.collapseSidePanel()
@@ -1084,7 +1125,7 @@ struct ExpandedSidePanel: View {
                                     title: size.displayName,
                                     isChecked: size == appDelegate.focusConfiguration.size,
                                     isIndented: true,
-                                    shortcut: index == 0 ? "⌃⌥P" : nil
+                                    shortcut: index == 0 ? "⌃⌘L" : nil
                                 ) {
                                     appDelegate.applyFocusSize(size)
                                     appDelegate.collapseSidePanel()
@@ -1124,7 +1165,7 @@ struct ExpandedSidePanel: View {
                                     title: bgStyle.displayName,
                                     isChecked: bgStyle == appDelegate.focusConfiguration.backgroundStyle,
                                     isIndented: true,
-                                    shortcut: index == 0 ? "⌃⌥L" : nil
+                                    shortcut: index == 0 ? "⌃⌘I" : nil
                                 ) {
                                     appDelegate.applyBackgroundStyle(bgStyle)
                                     appDelegate.collapseSidePanel()
@@ -1140,7 +1181,7 @@ struct ExpandedSidePanel: View {
                         SidePanelButton(
                             title: "Show Focus Message",
                             isChecked: false,
-                            shortcut: "⌃⌥F"
+                            shortcut: "⌃⌘F"
                         ) {
                             appDelegate.toggleFocusMode()
                             appDelegate.collapseSidePanel()

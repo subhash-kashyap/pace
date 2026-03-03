@@ -4,62 +4,55 @@ import AppKit
 struct OverlayContentView: View {
     @StateObject private var mouseTracker = GlobalMouseTracker()
     @ObservedObject var appDelegate: AppDelegate
-    
-    private var currentFocusShape: any FocusShape {
+
+    private func mousePosition(in geo: GeometryProxy) -> CGPoint {
+        if appDelegate.focusConfiguration.mode == .square || appDelegate.focusConfiguration.mode == .circle {
+            return CGPoint(x: mouseTracker.mouseX, y: mouseTracker.mouseY)
+        }
+        // Rectangle and Center Column follow mouse vertically only.
+        return CGPoint(x: geo.size.width / 2, y: mouseTracker.mouseY)
+    }
+
+    private func focusPath(in rect: CGRect, at position: CGPoint) -> Path {
         let config = appDelegate.focusConfiguration
         switch config.mode {
         case .rectangle:
-            return RectangleShape(height: config.rectangleHeight)
+            return RectangleShape(height: config.rectangleHeight).createMask(in: rect, at: position)
         case .centerColumn:
-            return CenterColumnShape(size: config.centerColumnSize)
+            return CenterColumnShape(size: config.centerColumnSize).createMask(in: rect, at: position)
         case .square:
-            return SquareShape(size: config.squareSize)
+            return SquareShape(size: config.squareSize).createMask(in: rect, at: position)
         case .circle:
-            return CircleShape(diameter: config.circleDiameter)
+            return CircleShape(diameter: config.circleDiameter).createMask(in: rect, at: position)
         }
     }
     
     var body: some View {
         GeometryReader { geo in
-            ZStack {
-                // Use the selected background style
-                Rectangle()
-                    .fill(appDelegate.focusConfiguration.backgroundStyle.color)
-                    .mask(
-                        Rectangle()
-                            .overlay(
-                                Path { path in
-                                    let mousePosition: CGPoint
-                                    if appDelegate.focusConfiguration.mode == .square || appDelegate.focusConfiguration.mode == .circle {
-                                        mousePosition = CGPoint(x: mouseTracker.mouseX, y: mouseTracker.mouseY)
-                                    } else {
-                                        // Rectangle and Center Column follow mouse vertically only
-                                        mousePosition = CGPoint(x: geo.size.width / 2, y: mouseTracker.mouseY)
-                                    }
-                                    
-                                    let focusPath = currentFocusShape.createMask(
-                                        in: geo.frame(in: .local),
-                                        at: mousePosition
-                                    )
-                                    path.addPath(focusPath)
-                                }
-                                .blendMode(.destinationOut)
-                            )
-                    )
-                    .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseY)
-                    .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseX)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.mode)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.size)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.backgroundStyle)
-                
-                // GridOverlay removed
+            let frame = geo.frame(in: .local)
+            let position = mousePosition(in: geo)
+            let cutout = focusPath(in: frame, at: position)
+
+            Path { path in
+                path.addRect(frame)
+                path.addPath(cutout)
             }
+            .fill(
+                appDelegate.focusConfiguration.backgroundStyle.color,
+                style: FillStyle(eoFill: true)
+            )
         }
         .edgesIgnoringSafeArea(.all)
         .allowsHitTesting(false)
         .onAppear {
-            mouseTracker.restartTracking()
+            mouseTracker.setTrackingEnabled(appDelegate.isOverlayVisible)
             NSApp.activate(ignoringOtherApps: true) // ensures global events fire immediately
+        }
+        .onChange(of: appDelegate.isOverlayVisible) { isVisible in
+            mouseTracker.setTrackingEnabled(isVisible)
+        }
+        .onDisappear {
+            mouseTracker.setTrackingEnabled(false)
         }
     }
 }
@@ -90,9 +83,7 @@ class GlobalMouseTracker: ObservableObject {
     private var timer: Timer?
     private let updateInterval: TimeInterval = 1.0 / 60.0
 
-    init() {
-        startTracking()
-    }
+    init() {}
 
     func startTracking() {
         stopTracking()
@@ -110,10 +101,8 @@ class GlobalMouseTracker: ObservableObject {
                 return
             }
 
-            withAnimation(.easeOut(duration: 0.12)) {
-                self.mouseY = flippedY
-                self.mouseX = adjustedX
-            }
+            self.mouseY = flippedY
+            self.mouseX = adjustedX
         }
 
         timer.tolerance = updateInterval / 2.0
@@ -122,8 +111,12 @@ class GlobalMouseTracker: ObservableObject {
         self.timer = timer
     }
 
-    func restartTracking() {
-        startTracking()
+    func setTrackingEnabled(_ enabled: Bool) {
+        if enabled {
+            startTracking()
+        } else {
+            stopTracking()
+        }
     }
 
     deinit {
