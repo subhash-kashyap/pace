@@ -13,7 +13,7 @@ struct FeaturesScreen: View {
                 FeatureRow(
                     icon: "rectangle",
                     title: "4 Modes of Spotlight",
-                    description: "Rectangle, Center Column, Square, and Circle"
+                    description: "Rectangle, Box, Square, and Circle"
                 )
                 FeatureRow(
                     icon: "doc.text",

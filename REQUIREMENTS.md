@@ -38,7 +38,7 @@ Pace is a desktop application that provides a reading focus overlay to help user
 - Height: Configurable (200px base × size multiplier)
 - Tracking: Vertical only (centered horizontally)
 
-**Center Column Mode**
+**Box Mode** (formerly Center Column)
 - Vertical column centered on screen
 - Width: 70% of screen width
 - Height: Configurable (200px base × size multiplier)
@@ -137,8 +137,11 @@ Visual reminder system:
 - **NO PERMISSIONS REQUIRED** (uses standard hotkey registration)
 
 **Shortcuts**
-- **⌃⌘J**: Cycle focus modes (Rectangle → Square → Center Column → Circle → repeat)
-- **⌃⌘O**: Set focus mode to Circle
+- **⌃⌘J**: Toggle between shapes (Rectangle → Square → Box → Circle → repeat)
+- **⌃⌘O**: Switch to Circle
+- **⌃⌘R**: Switch to Rectangle
+- **⌃⌘S**: Switch to Square
+- **⌃⌘B**: Switch to Box
 - **⌃⌘L**: Cycle sizes (S → M → L → repeat)
 - **⌃⌘K**: Toggle overlay on/off
 - **⌃⌘I**: Cycle background styles (Black → Black 70% → White → White 70% → repeat)
@@ -194,10 +197,11 @@ Visual reminder system:
 **Menu Structure**
 ```
 Turn Off                    ⌃⌘K
-Rectangle                   ⌃⌘J
-Square
-Center Column
+Rectangle                   ⌃⌘R
+Square                      ⌃⌘S
+Box                         ⌃⌘B
 Circle                      ⌃⌘O
+Cycle Shapes                ⌃⌘J
 ─────────────────────────────────
 Size                           >
   S                         ⌃⌘L
@@ -584,15 +588,18 @@ SUScheduledCheckInterval: 86400 (desktop only)
 
 ## Version History
 
-### 1.0.5 (Current)
+### 1.0.6 (Current)
+- Renamed "Center Column" to "Box" globally
+- Added explicit mode shortcuts:
+  - ⌃⌘R: Rectangle
+  - ⌃⌘S: Square
+  - ⌃⌘B: Box
+- Updated ⌃⌘J to "Toggle Shapes"
+- Updated ⌃⌘O to "Switch to Circle"
+- Fixed potential duplicate process issue in run script
+
+### 1.0.5
 - Updated global shortcuts to use Command + Control (⌃⌘)
-- New shortcut layout:
-  - ⌃⌘I: Cycle background (brightness/color)
-  - ⌃⌘L: Cycle sizes
-  - ⌃⌘O: Set to Circle
-  - ⌃⌘J: Cycle focus modes
-- Added scripts directory to gitignore
-- Created terminal run script (./scripts/run.sh)
 
 ### 1.0.4
 - Switched main shortcut key from Control to Command (⌥⌘)

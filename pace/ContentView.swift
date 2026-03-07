@@ -9,7 +9,7 @@ struct OverlayContentView: View {
         if appDelegate.focusConfiguration.mode == .square || appDelegate.focusConfiguration.mode == .circle {
             return CGPoint(x: mouseTracker.mouseX, y: mouseTracker.mouseY)
         }
-        // Rectangle and Center Column follow mouse vertically only.
+        // Rectangle and Box follow mouse vertically only.
         return CGPoint(x: geo.size.width / 2, y: mouseTracker.mouseY)
     }
 
@@ -19,7 +19,7 @@ struct OverlayContentView: View {
         case .rectangle:
             return RectangleShape(height: config.rectangleHeight).createMask(in: rect, at: position)
         case .centerColumn:
-            return CenterColumnShape(size: config.centerColumnSize).createMask(in: rect, at: position)
+            return BoxShape(size: config.boxSize).createMask(in: rect, at: position)
         case .square:
             return SquareShape(size: config.squareSize).createMask(in: rect, at: position)
         case .circle:

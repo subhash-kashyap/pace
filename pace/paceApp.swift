@@ -31,6 +31,9 @@ class GlobalHotkeyManager {
         case toggleFocus = 4
         case cycleBackground = 5
         case setCircle = 6
+        case setRectangle = 7
+        case setSquare = 8
+        case setBox = 9
     }
     
     // Helper to store event handler reference
@@ -51,6 +54,15 @@ class GlobalHotkeyManager {
         
         // ⌃⌘O - Set to Circle (KeyCode 31)
         register(id: .setCircle, keyCode: 31, modifiers: modifiers)
+
+        // ⌃⌘R - Set to Rectangle (KeyCode 15)
+        register(id: .setRectangle, keyCode: 15, modifiers: modifiers)
+
+        // ⌃⌘S - Set to Square (KeyCode 1)
+        register(id: .setSquare, keyCode: 1, modifiers: modifiers)
+
+        // ⌃⌘B - Set to Box (KeyCode 11)
+        register(id: .setBox, keyCode: 11, modifiers: modifiers)
         
         // ⌃⌘L - Cycle sizes (KeyCode 37)
         register(id: .cycleSize, keyCode: 37, modifiers: modifiers)
@@ -126,12 +138,24 @@ class GlobalHotkeyManager {
             
             switch HotkeyID(rawValue: hotKeyID.id) {
             case .cycleMode:
-                print("🎹 ⌃⌘J Cycling focus mode")
+                print("🎹 ⌃⌘J Toggling shapes")
                 appDelegate.cycleNextFocusMode()
                 
             case .setCircle:
                 print("🎹 ⌃⌘O Setting mode to Circle")
                 appDelegate.applyFocusMode(.circle)
+
+            case .setRectangle:
+                print("🎹 ⌃⌘R Setting mode to Rectangle")
+                appDelegate.applyFocusMode(.rectangle)
+
+            case .setSquare:
+                print("🎹 ⌃⌘S Setting mode to Square")
+                appDelegate.applyFocusMode(.square)
+
+            case .setBox:
+                print("🎹 ⌃⌘B Setting mode to Box")
+                appDelegate.applyFocusMode(.centerColumn)
                 
             case .cycleSize:
                 print("🎹 ⌃⌘L Cycling size")
@@ -314,16 +338,25 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         focusModeMenuItems.removeAll()
         for mode in FocusMode.allCases {
             let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
-            if mode == .circle {
+            switch mode {
+            case .circle:
                 modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘O")
-            } else if mode == .rectangle { // Rectangle is the first in allCases usually
-                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘J")
+            case .rectangle:
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘R")
+            case .square:
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘S")
+            case .centerColumn:
+                modeItem.attributedTitle = createMenuTitle(mode.displayName, shortcut: "⌃⌘B")
             }
             modeItem.representedObject = mode
             modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
             focusModeMenuItems[mode] = modeItem
             menu.addItem(modeItem)
         }
+        
+        let cycleItem = NSMenuItem(title: "Cycle Shapes", action: #selector(cycleNextFocusMode), keyEquivalent: "")
+        cycleItem.attributedTitle = createMenuTitle("Cycle Shapes", shortcut: "⌃⌘J")
+        menu.addItem(cycleItem)
         
         menu.addItem(NSMenuItem.separator())
         
@@ -1086,11 +1119,27 @@ struct ExpandedSidePanel: View {
                         SidePanelButton(
                             title: mode.displayName,
                             isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true,
-                            shortcut: mode == .circle ? "⌃⌘O" : (mode == .rectangle ? "⌃⌘J" : nil)
+                            shortcut: {
+                                switch mode {
+                                case .circle: return "⌃⌘O"
+                                case .rectangle: return "⌃⌘R"
+                                case .square: return "⌃⌘S"
+                                case .centerColumn: return "⌃⌘B"
+                                }
+                            }()
                         ) {
                             appDelegate.applyFocusMode(mode)
                             appDelegate.collapseSidePanel()
                         }
+                    }
+
+                    SidePanelButton(
+                        title: "Cycle Shapes",
+                        isChecked: false,
+                        shortcut: "⌃⌘J"
+                    ) {
+                        appDelegate.cycleNextFocusMode()
+                        appDelegate.collapseSidePanel()
                     }
                     
                         Divider()

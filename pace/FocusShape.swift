@@ -62,7 +62,7 @@ enum FocusMode: String, CaseIterable {
         case .rectangle:
             return "Rectangle"
         case .centerColumn:
-            return "Center Column"
+            return "Box"
         case .square:
             return "Square"
         case .circle:
@@ -131,7 +131,7 @@ struct FocusConfiguration {
         Self.baseRectangleHeight * size.multiplier
     }
     
-    var centerColumnSize: CGSize {
+    var boxSize: CGSize {
         let screenSize = NSScreen.main?.frame.size ?? CGSize(width: 1920, height: 1080)
         return CGSize(
             width: screenSize.width * 0.7,  // 70% of screen width
@@ -207,11 +207,11 @@ struct RectangleShape: FocusShape {
     }
 }
 
-// MARK: - Center Column Shape
-struct CenterColumnShape: FocusShape {
+// MARK: - Box Shape
+struct BoxShape: FocusShape {
     let size: CGSize
     
-    var displayName: String { "Center Column" }
+    var displayName: String { "Box" }
     
     func createMask(in rect: CGRect, at position: CGPoint) -> Path {
         var path = Path()
