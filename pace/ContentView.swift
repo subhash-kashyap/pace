@@ -57,6 +57,167 @@ struct OverlayContentView: View {
     }
 }
 
+struct TimerBubbleView: View {
+    @ObservedObject var appDelegate: AppDelegate
+    @State private var showingCustomInput = false
+    @State private var customMinutes = ""
+    
+    private var timeString: String {
+        let hours = Int(appDelegate.timeRemaining) / 3600
+        let minutes = (Int(appDelegate.timeRemaining) % 3600) / 60
+        let seconds = Int(appDelegate.timeRemaining) % 60
+        
+        if hours > 0 {
+            return String(format: "%d:%02d:%02d", hours, minutes, seconds)
+        } else {
+            return String(format: "%02d:%02d", minutes, seconds)
+        }
+    }
+    
+    var body: some View {
+        VStack(alignment: .trailing, spacing: 10) {
+            // Main Timer Bubble
+            HStack(spacing: 12) {
+                // Play/Pause/Stop indicators or actual buttons
+                HStack(spacing: 10) {
+                    if appDelegate.isTimerFinishedFlashActive {
+                        Button(action: {
+                            appDelegate.stopFinishedFlash()
+                        }) {
+                            Text("STOP")
+                                .font(.system(size: 11, weight: .bold))
+                                .foregroundColor(.white)
+                                .padding(.horizontal, 8)
+                                .padding(.vertical, 4)
+                                .background(Color.red)
+                                .cornerRadius(4)
+                        }
+                    } else {
+                        Button(action: {
+                            if appDelegate.timerStatus == .playing {
+                                appDelegate.pauseTimer()
+                            } else if appDelegate.timerStatus == .paused {
+                                appDelegate.resumeTimer()
+                            } else {
+                                appDelegate.startTimer(duration: 25 * 60)
+                            }
+                        }) {
+                            Image(systemName: appDelegate.timerStatus == .playing ? "pause.fill" : "play.fill")
+                                .font(.system(size: 14))
+                                .foregroundColor(.white)
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        if appDelegate.timerStatus != .stopped {
+                            Button(action: {
+                                appDelegate.stopTimer()
+                            }) {
+                                Image(systemName: "square.fill")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                            }
+                            .buttonStyle(PlainButtonStyle())
+                        }
+                    }
+                }
+                
+                Text(timeString)
+                    .font(.system(size: 24, weight: .semibold, design: .monospaced))
+                    .foregroundColor(.white)
+                    .frame(minWidth: 80)
+                
+                Button(action: {
+                    appDelegate.removeTimer()
+                }) {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundColor(.white.opacity(0.6))
+                }
+                .buttonStyle(PlainButtonStyle())
+            }
+            .padding(.horizontal, 16)
+            .padding(.vertical, 12)
+            .background(
+                RoundedRectangle(cornerRadius: 16)
+                    .fill(Color.black.opacity(0.8))
+                    .shadow(color: .black.opacity(0.3), radius: 10, x: 0, y: 4)
+            )
+            .overlay(
+                RoundedRectangle(cornerRadius: 16)
+                    .stroke(appDelegate.isTimerFinishedFlashActive ? Color.red : Color.white.opacity(0.1), lineWidth: 1)
+            )
+            
+            // Preset Options (Only show when not finished)
+            if !appDelegate.isTimerFinishedFlashActive {
+                HStack(spacing: 8) {
+                    TimerPresetButton(label: "1m") { appDelegate.startTimer(duration: 60) }
+                    TimerPresetButton(label: "5m") { appDelegate.startTimer(duration: 5 * 60) }
+                    TimerPresetButton(label: "25m") { appDelegate.startTimer(duration: 25 * 60) }
+                    TimerPresetButton(label: "1h") { appDelegate.startTimer(duration: 3600) }
+                    
+                    Button(action: {
+                        showingCustomInput.toggle()
+                    }) {
+                        Text("Custom")
+                            .font(.system(size: 10, weight: .medium))
+                            .padding(.horizontal, 8)
+                            .padding(.vertical, 4)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(6)
+                            .foregroundColor(.white)
+                    }
+                    .buttonStyle(PlainButtonStyle())
+                }
+                
+                if showingCustomInput {
+                    HStack {
+                        TextField("Mins", text: $customMinutes)
+                            .textFieldStyle(PlainTextFieldStyle())
+                            .padding(4)
+                            .background(Color.white.opacity(0.1))
+                            .cornerRadius(4)
+                            .foregroundColor(.white)
+                            .frame(width: 50)
+                        
+                        Button("Start") {
+                            if let mins = Double(customMinutes) {
+                                appDelegate.startTimer(duration: mins * 60)
+                                showingCustomInput = false
+                            }
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundColor(.white)
+                    }
+                    .padding(8)
+                    .background(Color.black.opacity(0.8))
+                    .cornerRadius(8)
+                }
+            }
+        }
+        .animation(.spring(), value: appDelegate.isTimerFinishedFlashActive)
+        .animation(.spring(), value: showingCustomInput)
+    }
+}
+
+struct TimerPresetButton: View {
+    let label: String
+    let action: () -> Void
+    
+    var body: some View {
+        Button(action: action) {
+            Text(label)
+                .font(.system(size: 10, weight: .medium))
+                .padding(.horizontal, 8)
+                .padding(.vertical, 4)
+                .background(Color.white.opacity(0.1))
+                .cornerRadius(6)
+                .foregroundColor(.white)
+        }
+        .buttonStyle(PlainButtonStyle())
+    }
+}
+
 struct GridOverlay: Shape {
     func path(in rect: CGRect) -> Path {
         var path = Path()

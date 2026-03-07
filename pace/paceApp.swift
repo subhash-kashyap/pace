@@ -189,12 +189,19 @@ class GlobalHotkeyManager {
     }
 }
 
+enum TimerStatus: String {
+    case stopped
+    case playing
+    case paused
+}
+
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNotificationCenterDelegate {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
     var flashWindow: FlashWindow?
     var onboardingWindow: OnboardingWindow?
     var sidePanelWindow: SidePanelWindow?
+    var timerWindow: TimerWindow?
     var statusItem: NSStatusItem?
     private var hotkeyManager: GlobalHotkeyManager?
     
@@ -202,13 +209,24 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
     @Published var onboardingPage: Int = 1
     @Published var isSidePanelExpanded: Bool = false
     @Published var isOverlayVisible: Bool = false
+    @Published var isTimerVisible: Bool = false
+    @Published var timeRemaining: TimeInterval = 0
+    @Published var totalTime: TimeInterval = 0
+    @Published var timerStatus: TimerStatus = .stopped
+    @Published var isTimerFinishedFlashActive: Bool = false
+    @Published var isSnoozed: Bool = false
+    
     private var toggleMenuItem: NSMenuItem?
+    private var snoozeMenuItem: NSMenuItem?
     private var focusMenuItem: NSMenuItem?
     private var flashMenuItem: NSMenuItem?
+    private var timerMenuItem: NSMenuItem?
     private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
     private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
     private var backgroundStyleMenuItems: [BackgroundStyle: NSMenuItem] = [:]
     private var flashTimer: Timer?
+    private var countdownTimer: Timer?
+    private var snoozeTimer: Timer?
     private var lastFlashTime: Date?
     
     // Track whether the overlay was visible before entering focus mode
@@ -256,6 +274,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         focusWindow = FocusWindow(appDelegate: self)
         flashWindow = FlashWindow()
         sidePanelWindow = SidePanelWindow(appDelegate: self)
+        timerWindow = TimerWindow(appDelegate: self)
         
         // Check if user has seen onboarding
         let hasSeenOnboarding = UserDefaults.standard.bool(forKey: "hasSeenOnboarding")
@@ -338,10 +357,12 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         }
         
         let menu = NSMenu()
+        menu.autoenablesItems = false
         
         // Add "Turn Off" as first option
         toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
         toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌘K")
+        toggleMenuItem?.isEnabled = true
         toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
         menu.addItem(toggleMenuItem!)
         
@@ -361,6 +382,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
             }
             modeItem.representedObject = mode
             modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
+            modeItem.isEnabled = true
             focusModeMenuItems[mode] = modeItem
             menu.addItem(modeItem)
         }
@@ -382,6 +404,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         
         let sizeMenuItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
         sizeMenuItem.submenu = sizeMenu
+        sizeMenuItem.isEnabled = true
         menu.addItem(sizeMenuItem)
         
         // Add background style selector submenu
@@ -400,15 +423,38 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         
         let bgMenuItem = NSMenuItem(title: "BG", action: nil, keyEquivalent: "")
         bgMenuItem.submenu = bgMenu
+        bgMenuItem.isEnabled = true
         menu.addItem(bgMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
         focusMenuItem?.attributedTitle = createMenuTitle("Show Focus Message", shortcut: "⌃⌘F")
+        focusMenuItem?.isEnabled = true
         menu.addItem(focusMenuItem!)
+        
+        timerMenuItem = NSMenuItem(title: "Timer", action: nil, keyEquivalent: "")
+        let timerSubmenu = NSMenu()
+        
+        let toggleItem = NSMenuItem(title: "Show Timer", action: #selector(trayToggleTimer), keyEquivalent: "")
+        toggleItem.state = isTimerVisible ? .on : .off
+        timerSubmenu.addItem(toggleItem)
+        
+        timerSubmenu.addItem(NSMenuItem.separator())
+        
+        let presets = [("1 min", 1), ("5 min", 5), ("25 min", 25), ("1 hour", 60)]
+        for (label, mins) in presets {
+            let item = NSMenuItem(title: label, action: #selector(selectTimerPreset), keyEquivalent: "")
+            item.tag = mins
+            timerSubmenu.addItem(item)
+        }
+        
+        timerMenuItem?.submenu = timerSubmenu
+        timerMenuItem?.isEnabled = true
+        menu.addItem(timerMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
         flashMenuItem = NSMenuItem(title: "Flash", action: #selector(toggleFlashMode), keyEquivalent: "")
+        flashMenuItem?.isEnabled = true
         menu.addItem(flashMenuItem!)
         
         menu.addItem(NSMenuItem.separator())
@@ -430,11 +476,18 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         
         let extrasMenuItem = NSMenuItem(title: "Extras", action: nil, keyEquivalent: "")
         extrasMenuItem.submenu = extrasMenu
+        extrasMenuItem.isEnabled = true
         menu.addItem(extrasMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: ""))
+        snoozeMenuItem = NSMenuItem(title: "Snooze for 1 hour", action: #selector(snoozeForOneHour), keyEquivalent: "")
+        menu.addItem(snoozeMenuItem!)
+        updateSnoozeMenu()
+        
+        let quitItem = NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: "")
+        quitItem.isEnabled = true
+        menu.addItem(quitItem)
         
         #if DEBUG
         menu.addItem(NSMenuItem.separator())
@@ -550,7 +603,45 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
             // Overlay is hidden - check "Turn Off", uncheck all modes
             toggleMenuItem?.state = .on
         }
+        updateSnoozeMenu()
         updateFocusModeMenu()
+    }
+    
+    @objc func snoozeForOneHour() {
+        if isSnoozed {
+            unsnooze()
+            return
+        }
+        // Only snooze if overlay is not visible
+        guard isOverlayVisible == false else { return }
+        
+        isSnoozed = true
+        sidePanelWindow?.orderOut(nil)
+        updateSnoozeMenu()
+        
+        // Timer for 1 hour
+        snoozeTimer?.invalidate()
+        snoozeTimer = Timer.scheduledTimer(withTimeInterval: 3600, repeats: false) { [weak self] _ in
+            self?.unsnooze()
+        }
+    }
+    
+    @objc func unsnooze() {
+        isSnoozed = false
+        snoozeTimer?.invalidate()
+        snoozeTimer = nil
+        sidePanelWindow?.orderFront(nil)
+        updateSnoozeMenu()
+    }
+    
+    func updateSnoozeMenu() {
+        if isSnoozed {
+            snoozeMenuItem?.title = "Unsnooze"
+            snoozeMenuItem?.isEnabled = true
+        } else {
+            snoozeMenuItem?.title = "Snooze for 1 hour"
+            snoozeMenuItem?.isEnabled = !isOverlayVisible
+        }
     }
     
     @objc func toggleOverlay() {
@@ -663,6 +754,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
             updateMenuState(overlayVisible: false)
             updateModeMenusEnabled(enabled: false)
         }
+    }
+    
+    @objc func trayToggleTimer() {
+        toggleTimerVisibility()
     }
     
     @objc func toggleFocusMode() {
@@ -929,6 +1024,136 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNoti
         isSidePanelExpanded = false
         sidePanelWindow?.updateLayout(isExpanded: false, animated: true)
     }
+
+    // MARK: - Timer Logic
+    
+    func toggleTimerVisibility() {
+        isTimerVisible.toggle()
+        if isTimerVisible {
+            timerWindow?.orderFront(nil)
+            if timerStatus == .stopped {
+                // Default to 25 mins if opened for the first time
+                startTimer(duration: 25 * 60)
+            }
+        } else {
+            timerWindow?.orderOut(nil)
+        }
+        updateTimerMenuState()
+    }
+    
+    func startTimer(duration: TimeInterval) {
+        stopTimer()
+        timeRemaining = duration
+        totalTime = duration
+        timerStatus = .playing
+        isTimerVisible = true
+        timerWindow?.orderFront(nil)
+        isTimerFinishedFlashActive = false
+        startCountdown()
+        updateTimerMenuState()
+    }
+    
+    @objc func selectTimerPreset(_ sender: NSMenuItem) {
+        let minutes = sender.tag
+        startTimer(duration: TimeInterval(minutes * 60))
+    }
+    
+    func pauseTimer() {
+        timerStatus = .paused
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        updateTimerMenuState()
+    }
+    
+    func resumeTimer() {
+        timerStatus = .playing
+        startCountdown()
+        updateTimerMenuState()
+    }
+    
+    func stopTimer() {
+        timerStatus = .stopped
+        countdownTimer?.invalidate()
+        countdownTimer = nil
+        timeRemaining = totalTime // Reset to starting time
+        isTimerFinishedFlashActive = false
+        updateTimerMenuState()
+    }
+    
+    func resetTimer() {
+        timeRemaining = totalTime
+        if timerStatus == .playing {
+            startCountdown()
+        }
+        updateTimerMenuState()
+    }
+    
+    func removeTimer() {
+        stopTimer()
+        isTimerVisible = false
+        timerWindow?.orderOut(nil)
+        updateTimerMenuState()
+    }
+    
+    private func startCountdown() {
+        countdownTimer?.invalidate()
+        countdownTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+            guard let self = self else { return }
+            if self.timeRemaining > 0 {
+                self.timeRemaining -= 1
+            } else {
+                self.timerReachedZero()
+            }
+        }
+    }
+    
+    private func timerReachedZero() {
+        stopTimer()
+        timerStatus = .stopped
+        isTimerFinishedFlashActive = true
+        startPersistentFlash()
+        updateTimerMenuState()
+        
+        // Push notification when timer is done
+        let content = UNMutableNotificationContent()
+        content.title = "Timer Done! 🕒"
+        content.body = "Your countdown has finished."
+        content.sound = .default
+        
+        let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+        let request = UNNotificationRequest(identifier: "timer_done_\(Date().timeIntervalSince1970)", content: content, trigger: trigger)
+        UNUserNotificationCenter.current().add(request)
+    }
+    
+    private func startPersistentFlash() {
+        // Trigger initial flash
+        showFlashBorder()
+        
+        // Setup a timer to keep flashing every 4 seconds (flash animation is 3s)
+        flashTimer?.invalidate()
+        flashTimer = Timer.scheduledTimer(withTimeInterval: 4.0, repeats: true) { [weak self] _ in
+            if self?.isTimerFinishedFlashActive == true {
+                self?.showFlashBorder()
+            } else {
+                self?.flashTimer?.invalidate()
+            }
+        }
+    }
+    
+    func stopFinishedFlash() {
+        isTimerFinishedFlashActive = false
+        flashTimer?.invalidate()
+        flashTimer = nil
+        removeTimer()
+    }
+    
+    private func updateTimerMenuState() {
+        timerMenuItem?.state = isTimerVisible ? .on : .off
+        if let toggleItem = timerMenuItem?.submenu?.items.first {
+            toggleItem.title = isTimerVisible ? "Hide Timer" : "Show Timer"
+            toggleItem.state = isTimerVisible ? .on : .off
+        }
+    }
 }
 
 class OverlayWindow: NSWindow {
@@ -1097,6 +1322,64 @@ class SidePanelWindow: NSWindow {
     }
 }
 
+class TimerWindow: NSWindow {
+    weak var appDelegate: AppDelegate?
+    
+    convenience init(appDelegate: AppDelegate) {
+        let screenRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        // Timer window size
+        let width: CGFloat = 280
+        let height: CGFloat = 120
+        
+        let windowRect = CGRect(
+            x: screenRect.maxX - width - 20,
+            y: screenRect.maxY - height - 20,
+            width: width,
+            height: height
+        )
+        
+        self.init(
+            contentRect: windowRect,
+            styleMask: [.borderless, .fullSizeContentView],
+            backing: .buffered,
+            defer: false
+        )
+        
+        self.appDelegate = appDelegate
+        
+        // Above everything
+        self.level = .screenSaver
+        self.backgroundColor = .clear
+        self.isOpaque = false
+        self.hasShadow = false
+        self.collectionBehavior = [.canJoinAllSpaces, .stationary, .fullScreenAuxiliary]
+        
+        self.contentView = NSHostingView(rootView: TimerWindowView(appDelegate: appDelegate))
+    }
+    
+    override var canBecomeKey: Bool {
+        return true
+    }
+    
+    override var canBecomeMain: Bool {
+        return true
+    }
+}
+
+struct TimerWindowView: View {
+    @ObservedObject var appDelegate: AppDelegate
+    
+    var body: some View {
+        ZStack(alignment: .topTrailing) {
+            if appDelegate.isTimerVisible {
+                TimerBubbleView(appDelegate: appDelegate)
+            }
+        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+    }
+}
+
 /// The container view for the side panel. It uses a ZStack with specific alignment
 /// to ensure that the transition between the collapsed 'bar' and the expanded 'menu'
 /// is centered and doesn't cause vertical shifting.
@@ -1152,6 +1435,7 @@ struct ExpandedSidePanel: View {
     @ObservedObject var appDelegate: AppDelegate
     @State private var showSizeSubmenu: Bool = false
     @State private var showBGSubmenu: Bool = false
+    @State private var showTimerSubmenu: Bool = false
     
     var body: some View {
         VStack(spacing: 0) {
@@ -1313,6 +1597,79 @@ struct ExpandedSidePanel: View {
                             .background(Color.white.opacity(0.2))
                             .padding(.vertical, 2)
                         
+                        // Timer
+                        Button(action: {
+                            withAnimation {
+                                showTimerSubmenu.toggle()
+                            }
+                        }) {
+                            HStack {
+                                Image(systemName: showTimerSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
+                                    .frame(width: 12)
+                                Text("Timer")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                if appDelegate.isTimerVisible {
+                                    Image(systemName: "checkmark")
+                                        .font(.system(size: 10))
+                                        .foregroundColor(.white)
+                                }
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        if showTimerSubmenu {
+                            SidePanelButton(
+                                title: appDelegate.isTimerVisible ? "Hide Timer" : "Show Timer",
+                                isChecked: false,
+                                isIndented: true
+                            ) {
+                                appDelegate.toggleTimerVisibility()
+                            }
+                            
+                            SidePanelButton(
+                                title: "1 min",
+                                isChecked: false,
+                                isIndented: true
+                            ) {
+                                appDelegate.startTimer(duration: 60)
+                            }
+                            
+                            SidePanelButton(
+                                title: "5 min",
+                                isChecked: false,
+                                isIndented: true
+                            ) {
+                                appDelegate.startTimer(duration: 5 * 60)
+                            }
+                            
+                            SidePanelButton(
+                                title: "25 min",
+                                isChecked: false,
+                                isIndented: true
+                            ) {
+                                appDelegate.startTimer(duration: 25 * 60)
+                            }
+                            
+                            SidePanelButton(
+                                title: "1 hour",
+                                isChecked: false,
+                                isIndented: true
+                            ) {
+                                appDelegate.startTimer(duration: 3600)
+                            }
+                        }
+                        
+                        Divider()
+                            .background(Color.white.opacity(0.2))
+                            .padding(.vertical, 2)
+                        
                         // Flash
                         SidePanelButton(
                             title: appDelegate.isFlashModeActive ? "Flash (Active)" : "Flash",
@@ -1347,6 +1704,16 @@ struct ExpandedSidePanel: View {
                             .background(Color.white.opacity(0.2))
                             .padding(.vertical, 2)
                         
+                        // Snooze
+                        SidePanelButton(
+                            title: appDelegate.isSnoozed ? "Unsnooze" : "Snooze for 1 hour",
+                            isChecked: false,
+                            isDisabled: appDelegate.isOverlayVisible
+                        ) {
+                            appDelegate.snoozeForOneHour()
+                            appDelegate.collapseSidePanel()
+                        }
+                        
                         // Quit
                         SidePanelButton(
                             title: "Quit Pace",
@@ -1377,6 +1744,7 @@ struct SidePanelButton: View {
     let title: String
     let isChecked: Bool
     var isIndented: Bool = false
+    var isDisabled: Bool = false
     var shortcut: String? = nil
     let action: () -> Void
     
@@ -1394,14 +1762,14 @@ struct SidePanelButton: View {
                 
                 Text(title)
                     .font(.system(size: 13))
-                    .foregroundColor(.white)
+                    .foregroundColor(isDisabled ? .white.opacity(0.3) : .white)
                 
                 Spacer()
                 
                 if let shortcut = shortcut {
                     Text(shortcut)
                         .font(.system(size: 11))
-                        .foregroundColor(.white.opacity(0.5))
+                        .foregroundColor(isDisabled ? .white.opacity(0.15) : .white.opacity(0.5))
                 }
             }
             .padding(.horizontal, isIndented ? 24 : 12)
@@ -1409,11 +1777,12 @@ struct SidePanelButton: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(PlainButtonStyle())
+        .disabled(isDisabled)
         .background(
             Color.white.opacity(0.0)
         )
         .onHover { isHovered in
-            if isHovered {
+            if isHovered && !isDisabled {
                 NSCursor.pointingHand.push()
             } else {
                 NSCursor.pop()
