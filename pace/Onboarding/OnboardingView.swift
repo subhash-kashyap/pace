@@ -21,6 +21,9 @@ struct OnboardingView: View {
                     } else if currentPage == 3 {
                         FeaturesScreen()
                             .transition(.opacity)
+                    } else if currentPage == 4 {
+                        ReminderScreen(onComplete: onComplete)
+                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,7 +54,7 @@ struct OnboardingView: View {
                     
                     // Page indicators
                     HStack(spacing: 8) {
-                        ForEach(1...3, id: \.self) { page in
+                        ForEach(1...4, id: \.self) { page in
                             Circle()
                                 .fill(page == currentPage ? Color.black : Color.black.opacity(0.3))
                                 .frame(width: 8, height: 8)
@@ -60,28 +63,27 @@ struct OnboardingView: View {
                     
                     Spacer()
                     
-                    Button(action: {
-                        if currentPage < 3 {
+                    if currentPage < 4 {
+                        Button(action: {
                             withAnimation {
                                 currentPage += 1
                             }
-                        } else {
-                            // Mark onboarding as complete and close
-                            UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
-                            AnalyticsManager.shared.trackOnboardingCompleted()
-                            onComplete()
+                        }) {
+                            Text("Next")
+                                .foregroundColor(.white)
+                                .fontWeight(.medium)
+                                .padding(.horizontal, 24)
+                                .padding(.vertical, 10)
+                                .frame(minWidth: 120, minHeight: 40)
+                                .background(Color.black)
+                                .cornerRadius(8)
                         }
-                    }) {
-                        Text(currentPage == 3 ? "Done" : "Next")
-                            .foregroundColor(.white)
-                            .fontWeight(.medium)
-                            .padding(.horizontal, 24)
-                            .padding(.vertical, 10)
-                            .frame(minWidth: 120, minHeight: 40)
-                            .background(Color.black)
-                            .cornerRadius(8)
+                        .buttonStyle(PlainButtonStyle())
+                    } else {
+                        // Page 4 handles its own completion via ReminderScreen buttons
+                        Spacer()
+                            .frame(width: 120)
                     }
-                    .buttonStyle(PlainButtonStyle())
                 }
                 .padding(.horizontal, 40)
                 .padding(.top, 20)

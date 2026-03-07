@@ -2,6 +2,7 @@ import SwiftUI
 import AppKit
 import Sparkle
 import Carbon
+import UserNotifications
 
 @main
 struct PaceApp: App {
@@ -188,7 +189,7 @@ class GlobalHotkeyManager {
     }
 }
 
-class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
+class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject, UNUserNotificationCenterDelegate {
     var overlayWindow: OverlayWindow?
     var focusWindow: FocusWindow?
     var flashWindow: FlashWindow?
@@ -239,6 +240,15 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         
         // Initialize global hotkey manager (Carbon - No permission needed!)
         hotkeyManager = GlobalHotkeyManager(appDelegate: self)
+        
+        // Setup notifications
+        let center = UNUserNotificationCenter.current()
+        center.delegate = self
+        
+        // Check current status for diagnostics
+        center.getNotificationSettings { settings in
+            print("📊 Current Notification Settings: \(settings)")
+        }
         
         setupMenuBar()
         
@@ -425,6 +435,11 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         menu.addItem(NSMenuItem.separator())
         
         menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: ""))
+        
+        #if DEBUG
+        menu.addItem(NSMenuItem.separator())
+        menu.addItem(NSMenuItem(title: "Immediate Test Notification", action: #selector(scheduleDebugNotification), keyEquivalent: ""))
+        #endif
         
         statusItem?.menu = menu
     }
@@ -844,6 +859,65 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     
     @objc func quitApp() {
         NSApplication.shared.terminate(nil)
+    }
+    
+    // MARK: - Notifications
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, willPresent notification: UNNotification, withCompletionHandler completionHandler: @escaping (UNNotificationPresentationOptions) -> Void) {
+        print("🔔 Notification about to be presented in foreground. ID: \(notification.request.identifier)")
+        // Allow the notification to show even if the app is focused
+        // Using all possible options for maximum chance of appearing
+        completionHandler([.banner, .list, .sound, .badge])
+    }
+    
+    func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse, withCompletionHandler completionHandler: @escaping () -> Void) {
+        print("👆 Notification clicked! Identifier: \(response.notification.request.identifier)")
+        
+        // When notification is clicked, show the overlay
+        DispatchQueue.main.async { [weak self] in
+            guard let self = self else { return }
+            print("🚀 Activating Pace via notification click...")
+            if self.overlayWindow?.isVisible != true {
+                self.toggleOverlay()
+            }
+            // Also bring app to front
+            NSApp.activate(ignoringOtherApps: true)
+        }
+        completionHandler()
+    }
+    
+    @objc func scheduleDebugNotification() {
+        print("🛠 DEBUG: Requested immediate notification")
+        let center = UNUserNotificationCenter.current()
+        
+        center.requestAuthorization(options: [.alert, .sound, .badge]) { granted, error in
+            print("🔐 Auth Check: granted=\(granted), error=\(String(describing: error))")
+            
+            guard granted else {
+                print("⚠️ NOTIFICATION PERMISSION DENIED. Please enable in System Settings.")
+                return 
+            }
+            
+            let content = UNMutableNotificationContent()
+            content.title = "Pace Debug 🎯"
+            content.body = "Immediate test notification. Click to activate!"
+            content.sound = .default
+            
+            // Unique ID to avoid overlapping issues
+            let id = "debug_\(Int(Date().timeIntervalSince1970))"
+            
+            // 0.1s is the "most immediate" possible trigger
+            let trigger = UNTimeIntervalNotificationTrigger(timeInterval: 0.1, repeats: false)
+            let request = UNNotificationRequest(identifier: id, content: content, trigger: trigger)
+            
+            center.add(request) { error in
+                if let error = error {
+                    print("❌ Schedule Error: \(error)")
+                } else {
+                    print("✅ Notification [\(id)] sent to system queue")
+                }
+            }
+        }
     }
     
     func toggleSidePanel() {
@@ -1439,8 +1513,8 @@ struct OnboardingContainerView: View {
                     onComplete: {
                         // Persist that the user has completed the flow
                         UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
+                        AnalyticsManager.shared.trackOnboardingCompleted()
                         appDelegate.closeOnboarding()
-                        appDelegate.onboardingPage = 1
                     }
                 )
                 
