@@ -5,39 +5,38 @@ struct FeaturesScreen: View {
         VStack(spacing: 30) {
             Spacer()
             
-            Text("Pace is in the menubar tray on top of your screen. It has")
-                .font(.system(size: 36, weight: .bold))
+            Text("Click on the white bar on the right edge of your screen.")
+                .font(.system(size: 32, weight: .bold)) // Slightly smaller to fit if needed
+                .multilineTextAlignment(.center)
                 .foregroundColor(.black)
+                .padding(.horizontal, 20)
             
             VStack(alignment: .leading, spacing: 20) {
                 FeatureRow(
-                    icon: "rectangle",
-                    title: "4 Modes of Spotlight",
-                    description: "Rectangle, Box, Square, and Circle"
+                    icon: "sidebar.right",
+                    title: "Open Side Menu",
+                    description: "Hover over the right-middle edge of your screen."
                 )
                 FeatureRow(
-                    icon: "doc.text",
-                    title: "Focus Message",
-                    description: "Distraction-free black and white space"
-                )
-                FeatureRow(
-                    icon: "timer",
-                    title: "Flash blinker",
-                    description: "Every 25-minutes screen boundary flashs. I use it to breathe out."
+                    icon: "power",
+                    title: "Turn On Pace",
+                    description: "Click 'Turn On' in the menu to see the spotlight."
                 )
             }
             .padding(.horizontal, 60)
             
             Spacer()
             
-            // Menu bar reference
-            HStack(spacing: 10) {
-                Image(systemName: "arrow.up")
-                    .foregroundColor(.black.opacity(0.6))
-                Text("Again, this app lives in your menubar tray on top, including this.")
-                    .font(.system(size: 14))
-                    .foregroundColor(.black.opacity(0.6))
+            // Visual hint
+            HStack(spacing: 15) {
+                Text("Look for the thin white bar on the right")
+                    .font(.system(size: 14, weight: .medium))
+                    .foregroundColor(.black.opacity(0.5))
+                Image(systemName: "arrow.right")
+                    .font(.system(size: 20, weight: .bold))
+                    .foregroundColor(.black.opacity(0.7))
             }
+            .padding(.bottom, 20)
         }
         .padding(.horizontal, 40)
     }

@@ -72,7 +72,7 @@ struct OnboardingView: View {
                             onComplete()
                         }
                     }) {
-                        Text(currentPage == 3 ? "Get Started" : "Next")
+                        Text(currentPage == 3 ? "Done" : "Next")
                             .foregroundColor(.white)
                             .fontWeight(.medium)
                             .padding(.horizontal, 24)

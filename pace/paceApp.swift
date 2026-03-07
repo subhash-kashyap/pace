@@ -198,6 +198,7 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var hotkeyManager: GlobalHotkeyManager?
     
     @Published var isOnboardingActive: Bool = false
+    @Published var onboardingPage: Int = 1
     @Published var isSidePanelExpanded: Bool = false
     @Published var isOverlayVisible: Bool = false
     private var toggleMenuItem: NSMenuItem?
@@ -353,11 +354,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             focusModeMenuItems[mode] = modeItem
             menu.addItem(modeItem)
         }
-        
-        let cycleItem = NSMenuItem(title: "Cycle Shapes", action: #selector(cycleNextFocusMode), keyEquivalent: "")
-        cycleItem.attributedTitle = createMenuTitle("Cycle Shapes", shortcut: "⌃⌘J")
-        menu.addItem(cycleItem)
-        
         menu.addItem(NSMenuItem.separator())
         
         // Add size selector submenu
@@ -791,44 +787,53 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             updateMenuState(overlayVisible: false)
         }
         
-        // Show onboarding
+        // Always start from the first page when showing onboarding manually
+        onboardingPage = 1
         isOnboardingActive = true
         onboardingWindow.orderFront(nil)
         onboardingWindow.makeKey()
         NSApp.activate(ignoringOtherApps: true)
     }
     
+    /// Closes the onboarding window and determines whether to show the main overlay.
     func closeOnboarding() {
         isOnboardingActive = false
         onboardingWindow?.orderOut(nil)
         
-        // Show overlay for the first time (only on initial onboarding)
-        if overlayWindow?.isVisible != true && !UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
-            // Set default to Circle mode with Medium size and Black 70% background
+        // When onboarding completes (or is dismissed via the 'X' button),
+        // we check if the user has now officially "seen" it.
+        if UserDefaults.standard.bool(forKey: "hasSeenOnboarding") {
+            // First-time completion experience: 
+            // We force-activate the overlay so the user sees Pace immediately.
+            
+            // 1. Set sensible defaults
             focusConfiguration.mode = .circle
             focusConfiguration.size = .medium
             focusConfiguration.backgroundStyle = .black70
             FocusConfiguration.current = focusConfiguration
+            
+            // 2. Sync menu items state
             updateFocusModeMenu()
             updateFocusSizeMenu()
             updateBackgroundStyleMenu()
             
+            // 3. Show the interactive overlay
             overlayWindow?.orderFront(nil)
             overlayShownTime = Date()
             updateMenuState(overlayVisible: true)
             updateModeMenusEnabled(enabled: true)
             
-            // Track initial mode
+            // 4. Record analytics
             AnalyticsManager.shared.trackModeActivated(
                 mode: focusConfiguration.mode.rawValue,
                 size: focusConfiguration.size.rawValue
             )
             AnalyticsManager.shared.trackPaceViewShown()
         } else {
-            // Restore overlay if it was visible before
-            overlayWindow?.orderFront(nil)
-            updateMenuState(overlayVisible: true)
-            updateModeMenusEnabled(enabled: true)
+            // If onboarding was just closed but not "completed" (e.g. via ESC),
+            // we don't force-enable the overlay, but we do restore it if it 
+            // was already visible before onboarding started.
+            // (Note: Currently onboarding hides overlay when opened)
         }
     }
     
@@ -954,17 +959,28 @@ class FlashWindow: NSWindow {
 
 class SidePanelWindow: NSWindow {
     weak var appDelegate: AppDelegate?
-    private let expandedWidth: CGFloat = 270
-    private let collapsedWidth: CGFloat = 28
-    private let collapsedHeight: CGFloat = 120
     
+    // Layout constants
+    private static let expandedWidth: CGFloat = 270
+    private static let collapsedWidth: CGFloat = 28
+    private static let expandedMenuWidth: CGFloat = 220
+    
+    // Property accessors to maintain compatibility with existing methods
+    private var expandedWidth: CGFloat { Self.expandedWidth }
+    private var collapsedWidth: CGFloat { Self.collapsedWidth }
+    
+    /// Initializes the side panel as a full-height invisible window on the right edge.
+    /// This prevents jumping/glitching during expansion because the window frame
+    /// only changes its width, while its vertical position remains perfectly stable.
     convenience init(appDelegate: AppDelegate) {
-        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let screenRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        // Start as a thin bar on the right, full visible height.
         let windowRect = CGRect(
-            x: screenRect.maxX - 28,
-            y: screenRect.midY - 60,
-            width: 28,
-            height: 120
+            x: screenRect.maxX - Self.collapsedWidth,
+            y: screenRect.origin.y,
+            width: Self.collapsedWidth,
+            height: screenRect.height
         )
         
         self.init(
@@ -976,7 +992,7 @@ class SidePanelWindow: NSWindow {
         
         self.appDelegate = appDelegate
         
-        // Keep this above the focus overlay without using the absolute max system level.
+        // Maintain high window level to stay above most other windows.
         self.level = NSWindow.Level(rawValue: NSWindow.Level.screenSaver.rawValue + 1)
         self.backgroundColor = .clear
         self.isOpaque = false
@@ -986,25 +1002,17 @@ class SidePanelWindow: NSWindow {
         self.contentView = NSHostingView(rootView: SidePanelView(appDelegate: appDelegate))
     }
 
+    /// Toggles between the thin hover bar and the full settings menu.
+    /// Using a stable Y and height here is critical to preventing the 'jumping' bug.
     func updateLayout(isExpanded: Bool, animated: Bool) {
-        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        let targetFrame: CGRect
-
-        if isExpanded {
-            targetFrame = CGRect(
-                x: screenRect.maxX - expandedWidth,
-                y: 0,
-                width: expandedWidth,
-                height: screenRect.height
-            )
-        } else {
-            targetFrame = CGRect(
-                x: screenRect.maxX - collapsedWidth,
-                y: screenRect.midY - (collapsedHeight / 2),
-                width: collapsedWidth,
-                height: collapsedHeight
-            )
-        }
+        let screenRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        
+        let targetFrame = CGRect(
+            x: screenRect.maxX - (isExpanded ? expandedWidth : collapsedWidth),
+            y: screenRect.origin.y,
+            width: isExpanded ? expandedWidth : collapsedWidth,
+            height: screenRect.height
+        )
 
         hasShadow = isExpanded
         setFrame(targetFrame, display: true, animate: animated)
@@ -1015,28 +1023,27 @@ class SidePanelWindow: NSWindow {
     }
 }
 
+/// The container view for the side panel. It uses a ZStack with specific alignment
+/// to ensure that the transition between the collapsed 'bar' and the expanded 'menu'
+/// is centered and doesn't cause vertical shifting.
 struct SidePanelView: View {
     @ObservedObject var appDelegate: AppDelegate
     
     var body: some View {
-        VStack {
-            Spacer()  // Push to vertical center
-            
-            HStack(spacing: 0) {
-                Spacer()
-                
-                if appDelegate.isSidePanelExpanded {
-                    ExpandedSidePanel(appDelegate: appDelegate)
-                        .transition(.move(edge: .trailing))
-                } else {
-                    CollapsedSidePanel(appDelegate: appDelegate)
-                        .transition(.move(edge: .trailing))
-                }
+        ZStack(alignment: .center) {
+            if appDelegate.isSidePanelExpanded {
+                ExpandedSidePanel(appDelegate: appDelegate)
+                    .transition(.asymmetric(
+                        insertion: .move(edge: .trailing).combined(with: .opacity),
+                        removal: .move(edge: .trailing).combined(with: .opacity)
+                    ))
+            } else {
+                CollapsedSidePanel(appDelegate: appDelegate)
+                    .transition(.opacity)
             }
-            
-            Spacer()  // Push to vertical center
         }
-        .animation(.spring(response: 0.3, dampingFraction: 0.8), value: appDelegate.isSidePanelExpanded)
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .animation(.spring(response: 0.35, dampingFraction: 0.85), value: appDelegate.isSidePanelExpanded)
     }
 }
 
@@ -1066,18 +1073,18 @@ struct CollapsedSidePanel: View {
     }
 }
 
+/// The settings menu content. It handles its own vertical centering within the window.
 struct ExpandedSidePanel: View {
     @ObservedObject var appDelegate: AppDelegate
     @State private var showSizeSubmenu: Bool = false
     @State private var showBGSubmenu: Bool = false
     
     var body: some View {
-        GeometryReader { geometry in
-            VStack {
-                Spacer()  // Center vertically
-                
-                VStack(alignment: .leading, spacing: 0) {
-                // Header with close button
+        VStack(spacing: 0) {
+            Spacer() // Top centering weight
+            
+            VStack(alignment: .leading, spacing: 0) {
+                // Header
                 HStack {
                     Text("Pace")
                         .font(.system(size: 16, weight: .semibold))
@@ -1103,7 +1110,7 @@ struct ExpandedSidePanel: View {
                         // Turn Off button
                         SidePanelButton(
                             title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
-                            isChecked: appDelegate.overlayWindow?.isVisible != true,
+                            isChecked: false,
                             shortcut: "⌃⌘K"
                         ) {
                             appDelegate.toggleOverlay()
@@ -1133,14 +1140,6 @@ struct ExpandedSidePanel: View {
                         }
                     }
 
-                    SidePanelButton(
-                        title: "Cycle Shapes",
-                        isChecked: false,
-                        shortcut: "⌃⌘J"
-                    ) {
-                        appDelegate.cycleNextFocusMode()
-                        appDelegate.collapseSidePanel()
-                    }
                     
                         Divider()
                             .background(Color.white.opacity(0.2))
@@ -1284,7 +1283,7 @@ struct ExpandedSidePanel: View {
                     }
                     .padding(.vertical, 6)
                 }
-                .frame(maxHeight: geometry.size.height * 0.32)  // Max 32% of screen height - requires scroll for Quit
+                .frame(maxHeight: 400) // Fixed max height for the scrollable area
                 }
                 .frame(width: 220)
                 .background(
@@ -1294,10 +1293,9 @@ struct ExpandedSidePanel: View {
                 )
                 .padding(.trailing, 8)
                 
-                Spacer()  // Center vertically
+                Spacer() // Bottom centering weight
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
-        }
+        .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
 }
 
@@ -1354,24 +1352,40 @@ class OnboardingWindow: NSWindow {
     weak var appDelegate: AppDelegate?
     
     convenience init(appDelegate: AppDelegate) {
-        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        // Use visibleFrame to account for menu bar and dock
+        let screenRect = NSScreen.main?.visibleFrame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
+        let width: CGFloat = 800
+        let height: CGFloat = 640
+        
+        let windowRect = CGRect(
+            x: screenRect.midX - width / 2,
+            y: screenRect.midY - height / 2,
+            width: width,
+            height: height
+        )
         
         self.init(
-            contentRect: screenRect,
-            styleMask: [.borderless, .fullSizeContentView],
+            contentRect: windowRect,
+            // Use .titled with hidden title bar to get a nice window with shadow and rounded corners
+            styleMask: [.titled, .fullSizeContentView, .closable],
             backing: .buffered,
             defer: false
         )
         
         self.appDelegate = appDelegate
         
-        self.level = .statusBar
+        // Modern window appearance
+        self.titleVisibility = .hidden
+        self.titlebarAppearsTransparent = true
+        self.isMovableByWindowBackground = true
+        
+        self.level = .floating // Use floating to be above normal windows but not extreme
         self.backgroundColor = .white
         self.isOpaque = true
-        self.hasShadow = false
+        self.hasShadow = true
         self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
         
-        self.setFrame(screenRect, display: true)
+        self.setFrame(windowRect, display: true)
         
         self.contentView = NSHostingView(rootView: OnboardingContainerView(appDelegate: appDelegate))
     }
@@ -1396,18 +1410,18 @@ class OnboardingWindow: NSWindow {
 
 struct OnboardingContainerView: View {
     @ObservedObject var appDelegate: AppDelegate
-    @State private var currentPage: Int = 1
-    
     var body: some View {
         ZStack {
             Color.white.edgesIgnoringSafeArea(.all)
             
             VStack {
+                // Header with explicit close button
                 HStack {
                     Spacer()
                     Button(action: {
                         appDelegate.closeOnboarding()
-                        currentPage = 1  // Reset to first page
+                        // Resets to page 1 for the next time it's opened
+                        appDelegate.onboardingPage = 1
                     }) {
                         Image(systemName: "xmark.circle.fill")
                             .font(.system(size: 24))
@@ -1419,12 +1433,14 @@ struct OnboardingContainerView: View {
                 
                 Spacer()
                 
+                // The main onboarding content
                 OnboardingView(
-                    currentPage: $currentPage,
+                    currentPage: $appDelegate.onboardingPage,
                     onComplete: {
+                        // Persist that the user has completed the flow
                         UserDefaults.standard.set(true, forKey: "hasSeenOnboarding")
                         appDelegate.closeOnboarding()
-                        currentPage = 1  // Reset to first page
+                        appDelegate.onboardingPage = 1
                     }
                 )
                 
