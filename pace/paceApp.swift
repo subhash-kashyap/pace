@@ -28,8 +28,8 @@ class GlobalHotkeyManager {
         case cycleMode = 1
         case cycleSize = 2
         case turnOff = 3
-        case toggleFocus = 4
         case cycleBackground = 5
+        case toggleSidePanel = 6
     }
     
     // Helper to store event handler reference
@@ -57,8 +57,8 @@ class GlobalHotkeyManager {
         // ⌃⌥L - Cycle background (KeyCode 37)
         register(id: .cycleBackground, keyCode: 37, modifiers: modifiers)
         
-        // ⌃⌥F - Focus message (KeyCode 3)
-        register(id: .toggleFocus, keyCode: 3, modifiers: modifiers)
+        // ⌃⌥S - Toggle Side Panel (KeyCode 1)
+        register(id: .toggleSidePanel, keyCode: 1, modifiers: modifiers)
         
         // Install event handler
         let eventSpec = [
@@ -135,11 +135,11 @@ class GlobalHotkeyManager {
                 
             case .cycleBackground:
                 print("🎹 ⌃⌥L Cycling background")
-                appDelegate.cycleBackgroundStyle()
+                appDelegate.cycleColorMode()
                 
-            case .toggleFocus:
-                print("🎹 ⌃⌥F Toggling focus message")
-                appDelegate.toggleFocusMode()
+            case .toggleSidePanel:
+                print("🎹 ⌃⌥S Toggling side panel")
+                appDelegate.toggleSidePanel()
                 
             case .none:
                 break
@@ -158,38 +158,26 @@ class GlobalHotkeyManager {
 
 class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     var overlayWindow: OverlayWindow?
-    var focusWindow: FocusWindow?
-    var flashWindow: FlashWindow?
     var onboardingWindow: OnboardingWindow?
     var sidePanelWindow: SidePanelWindow?
     var statusItem: NSStatusItem?
     private var hotkeyManager: GlobalHotkeyManager?
-    
+
     @Published var isOnboardingActive: Bool = false
     @Published var isSidePanelExpanded: Bool = false
     private var toggleMenuItem: NSMenuItem?
-    private var focusMenuItem: NSMenuItem?
-    private var flashMenuItem: NSMenuItem?
     private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
     private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
-    private var backgroundStyleMenuItems: [BackgroundStyle: NSMenuItem] = [:]
-    private var flashTimer: Timer?
-    private var lastFlashTime: Date?
-    
-    // Track whether the overlay was visible before entering focus mode
-    private var prevOverlayWasVisible: Bool = false
-    
+    private 
+
     // Analytics tracking
     private var overlayShownTime: Date?
-    private var focusModeShownTime: Date?
-    
+
     // Sparkle updater
     private var updaterController: SPUStandardUpdaterController?
 
-    @Published var focusText: String = ""
-    @Published var isFocusModeActive: Bool = false
-    @Published var isFlashModeActive: Bool = false
     @Published var focusConfiguration: FocusConfiguration = FocusConfiguration.current
+
     
     func applicationDidFinishLaunching(_ aNotification: Notification) {
         NSApp.setActivationPolicy(.accessory)
@@ -209,8 +197,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         setupMenuBar()
         
         overlayWindow = OverlayWindow(appDelegate: self)
-        focusWindow = FocusWindow(appDelegate: self)
-        flashWindow = FlashWindow()
         sidePanelWindow = SidePanelWindow(appDelegate: self)
         
         // Check if user has seen onboarding
@@ -250,17 +236,10 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func applicationWillTerminate(_ notification: Notification) {
-        // Track app closed and any active sessions
         if let startTime = overlayShownTime, overlayWindow?.isVisible == true {
             let duration = Date().timeIntervalSince(startTime)
             AnalyticsManager.shared.trackPaceViewHidden(duration: duration)
         }
-        
-        if let startTime = focusModeShownTime, isFocusModeActive {
-            let duration = Date().timeIntervalSince(startTime)
-            AnalyticsManager.shared.trackFocusModeHidden(duration: duration)
-        }
-        
         AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
         AnalyticsManager.shared.trackAppClosed()
     }
@@ -284,23 +263,23 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         return NSAttributedString(string: title)
     }
     
+
+    var opacitySliderView: MenuSliderView?
+    var blurSliderView: MenuSliderView?
+    var colorToggleItem: NSMenuItem?
+
     func setupMenuBar() {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.squareLength)
         
         if let button = statusItem?.button {
-            button.image = NSImage(systemSymbolName: "flashlight.on.fill", accessibilityDescription: "Pace")
+            button.image = NSImage(systemSymbolName: "eye", accessibilityDescription: "Pace")
             button.toolTip = "Pace - Reading Focus Tool"
         }
         
         let menu = NSMenu()
         
-        // Add "Turn Off" as first option
-        toggleMenuItem = NSMenuItem(title: "Turn Off", action: #selector(toggleOverlay), keyEquivalent: "")
-        toggleMenuItem?.attributedTitle = createMenuTitle("Turn Off", shortcut: "⌃⌥K")
-        toggleMenuItem?.state = .off  // Will be updated based on overlay visibility
-        menu.addItem(toggleMenuItem!)
-        
-        // Add focus mode options
+        // --- 1. Shape ---
+        let shapeMenu = NSMenu()
         focusModeMenuItems.removeAll()
         for (index, mode) in FocusMode.allCases.enumerated() {
             let modeItem = NSMenuItem(title: mode.displayName, action: #selector(selectFocusMode(_:)), keyEquivalent: "")
@@ -310,12 +289,14 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             modeItem.representedObject = mode
             modeItem.state = (mode == focusConfiguration.mode) ? .on : .off
             focusModeMenuItems[mode] = modeItem
-            menu.addItem(modeItem)
+            shapeMenu.addItem(modeItem)
         }
+        let shapeMenuItem = NSMenuItem(title: "Shape", action: nil, keyEquivalent: "")
+        shapeMenuItem.image = NSImage(systemSymbolName: "square.on.circle", accessibilityDescription: nil)
+        shapeMenuItem.submenu = shapeMenu
+        menu.addItem(shapeMenuItem)
         
-        menu.addItem(NSMenuItem.separator())
-        
-        // Add size selector submenu
+        // --- 2. Size ---
         let sizeMenu = NSMenu()
         focusSizeMenuItems.removeAll()
         for (index, size) in FocusSize.allCases.enumerated() {
@@ -328,62 +309,72 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
             focusSizeMenuItems[size] = sizeItem
             sizeMenu.addItem(sizeItem)
         }
-        
         let sizeMenuItem = NSMenuItem(title: "Size", action: nil, keyEquivalent: "")
+        sizeMenuItem.image = NSImage(systemSymbolName: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left", accessibilityDescription: nil)
         sizeMenuItem.submenu = sizeMenu
         menu.addItem(sizeMenuItem)
         
-        // Add background style selector submenu
-        let bgMenu = NSMenu()
-        backgroundStyleMenuItems.removeAll()
-        for (index, bgStyle) in BackgroundStyle.allCases.enumerated() {
-            let bgItem = NSMenuItem(title: bgStyle.displayName, action: #selector(selectBackgroundStyle(_:)), keyEquivalent: "")
-            if index == 0 {
-                bgItem.attributedTitle = createMenuTitle(bgStyle.displayName, shortcut: "⌃⌥L")
-            }
-            bgItem.representedObject = bgStyle
-            bgItem.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
-            backgroundStyleMenuItems[bgStyle] = bgItem
-            bgMenu.addItem(bgItem)
+        // --- 3. Color ---
+        let colorMenu = NSMenu()
+        let darkItem = NSMenuItem(title: "Dark", action: #selector(selectDarkMode), keyEquivalent: "")
+        darkItem.state = focusConfiguration.isDarkMode ? .on : .off
+        let lightItem = NSMenuItem(title: "Light", action: #selector(selectLightMode), keyEquivalent: "")
+        lightItem.state = !focusConfiguration.isDarkMode ? .on : .off
+        colorMenu.addItem(darkItem)
+        colorMenu.addItem(lightItem)
+        
+        let colorMenuItem = NSMenuItem(title: "Color", action: nil, keyEquivalent: "")
+        colorMenuItem.image = NSImage(systemSymbolName: "paintpalette", accessibilityDescription: nil)
+        colorMenuItem.submenu = colorMenu
+        menu.addItem(colorMenuItem)
+        
+        menu.addItem(NSMenuItem.separator())
+        
+        // --- 4. Opacity Slider ---
+        let opacityMenuItem = NSMenuItem()
+        let opView = MenuSliderView(title: "Opacity", iconName: "circle.lefthalf.filled", value: focusConfiguration.opacity, minValue: 0.1, maxValue: 1.0)
+        opView.valueFormatter = { "\(Int(zsh * 100))%" }
+        opView.onValueChanged = { [weak self] val in
+            self?.applyOpacity(val)
         }
+        opacityMenuItem.view = opView
+        opacitySliderView = opView
+        menu.addItem(opacityMenuItem)
         
-        let bgMenuItem = NSMenuItem(title: "BG", action: nil, keyEquivalent: "")
-        bgMenuItem.submenu = bgMenu
-        menu.addItem(bgMenuItem)
-        
-        menu.addItem(NSMenuItem.separator())
-        focusMenuItem = NSMenuItem(title: "Show Focus Message", action: #selector(toggleFocusMode), keyEquivalent: "")
-        focusMenuItem?.attributedTitle = createMenuTitle("Show Focus Message", shortcut: "⌃⌥F")
-        menu.addItem(focusMenuItem!)
-        
-        menu.addItem(NSMenuItem.separator())
-        flashMenuItem = NSMenuItem(title: "Flash", action: #selector(toggleFlashMode), keyEquivalent: "")
-        menu.addItem(flashMenuItem!)
-        
-        menu.addItem(NSMenuItem.separator())
-        
-        let breatheOutItem = NSMenuItem(title: "Breathe in - Breathe out, repeat", action: nil, keyEquivalent: "")
-        breatheOutItem.isEnabled = false
-        menu.addItem(breatheOutItem)
+        // --- 5. Blur Slider ---
+        let blurMenuItem = NSMenuItem()
+        let blView = MenuSliderView(title: "Blur", iconName: "drop", value: focusConfiguration.blurRadius, minValue: 0.0, maxValue: 20.0)
+        blView.valueFormatter = { "\(Int(zsh))px" }
+        blView.onValueChanged = { [weak self] val in
+            self?.applyBlurRadius(val)
+        }
+        blurMenuItem.view = blView
+        blurSliderView = blView
+        menu.addItem(blurMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        // Add Extras submenu
-        let extrasMenu = NSMenu()
-        
+        // --- 6. Settings ---
+        let settingsMenu = NSMenu()
         let howToUseItem = NSMenuItem(title: "How to Use", action: #selector(showOnboarding), keyEquivalent: "")
-        extrasMenu.addItem(howToUseItem)
-        
+        settingsMenu.addItem(howToUseItem)
         let checkForUpdatesItem = NSMenuItem(title: "Check for Updates...", action: #selector(checkForUpdates), keyEquivalent: "")
-        extrasMenu.addItem(checkForUpdatesItem)
+        settingsMenu.addItem(checkForUpdatesItem)
+        settingsMenu.addItem(NSMenuItem.separator())
+        settingsMenu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: ""))
         
-        let extrasMenuItem = NSMenuItem(title: "Extras", action: nil, keyEquivalent: "")
-        extrasMenuItem.submenu = extrasMenu
-        menu.addItem(extrasMenuItem)
+        let settingsMenuItem = NSMenuItem(title: "Settings", action: nil, keyEquivalent: "")
+        settingsMenuItem.image = NSImage(systemSymbolName: "gearshape", accessibilityDescription: nil)
+        settingsMenuItem.submenu = settingsMenu
+        menu.addItem(settingsMenuItem)
         
         menu.addItem(NSMenuItem.separator())
         
-        menu.addItem(NSMenuItem(title: "Quit Pace", action: #selector(quitApp), keyEquivalent: ""))
+        // --- 7. Hide Overlay (Turn Off) ---
+        toggleMenuItem = NSMenuItem(title: "Hide Overlay", action: #selector(toggleOverlay), keyEquivalent: "")
+        toggleMenuItem?.attributedTitle = createMenuTitle("Hide Overlay", shortcut: "⌃⌥K")
+        toggleMenuItem?.state = .off
+        menu.addItem(toggleMenuItem!)
         
         statusItem?.menu = menu
     }
@@ -394,25 +385,17 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func applyFocusMode(_ mode: FocusMode) {
-        // Track mode change
         AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
-        
         focusConfiguration.mode = mode
         FocusConfiguration.current = focusConfiguration
+        AnalyticsManager.shared.trackModeActivated(mode: mode.rawValue, size: focusConfiguration.size.rawValue)
         
-        AnalyticsManager.shared.trackModeActivated(
-            mode: mode.rawValue,
-            size: focusConfiguration.size.rawValue
-        )
-        
-        // Show overlay if it's hidden
         if overlayWindow?.isVisible != true {
             overlayShownTime = Date()
             AnalyticsManager.shared.trackPaceViewShown()
             overlayWindow?.orderFront(nil)
             updateMenuState(overlayVisible: true)
         }
-        
         updateFocusModeMenu()
     }
     
@@ -422,32 +405,62 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     }
     
     func applyFocusSize(_ size: FocusSize) {
-        // Track size change (as a mode update)
         AnalyticsManager.shared.trackModeDeactivated(mode: focusConfiguration.mode.rawValue)
-        
         focusConfiguration.size = size
         FocusConfiguration.current = focusConfiguration
+        AnalyticsManager.shared.trackModeActivated(mode: focusConfiguration.mode.rawValue, size: size.rawValue)
         
-        AnalyticsManager.shared.trackModeActivated(
-            mode: focusConfiguration.mode.rawValue,
-            size: size.rawValue
-        )
-        
-        // Show overlay if it's hidden
         if overlayWindow?.isVisible != true {
             overlayShownTime = Date()
             AnalyticsManager.shared.trackPaceViewShown()
             overlayWindow?.orderFront(nil)
             updateMenuState(overlayVisible: true)
         }
-        
         updateFocusSizeMenu()
+    }
+    
+    @objc func selectDarkMode() {
+        applyDarkMode(true)
+    }
+    
+    @objc func selectLightMode() {
+        applyDarkMode(false)
+    }
+    
+    func applyDarkMode(_ isDark: Bool) {
+        focusConfiguration.isDarkMode = isDark
+        FocusConfiguration.current = focusConfiguration
+        
+        if overlayWindow?.isVisible != true {
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+        updateColorMenu()
+    }
+    
+    func applyOpacity(_ opacity: Double) {
+        focusConfiguration.opacity = opacity
+        FocusConfiguration.current = focusConfiguration
+        
+        if overlayWindow?.isVisible != true {
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
+    }
+    
+    func applyBlurRadius(_ blur: Double) {
+        focusConfiguration.blurRadius = blur
+        FocusConfiguration.current = focusConfiguration
+        
+        if overlayWindow?.isVisible != true {
+            overlayWindow?.orderFront(nil)
+            updateMenuState(overlayVisible: true)
+        }
     }
     
     func updateFocusModeMenu() {
         let overlayVisible = overlayWindow?.isVisible == true
         for (mode, item) in focusModeMenuItems {
-            // Only show checkmark on active mode if overlay is visible
             item.state = (overlayVisible && mode == focusConfiguration.mode) ? .on : .off
         }
     }
@@ -458,43 +471,36 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
-    func updateBackgroundStyleMenu() {
-        for (bgStyle, item) in backgroundStyleMenuItems {
-            item.state = (bgStyle == focusConfiguration.backgroundStyle) ? .on : .off
+    func updateColorMenu() {
+        // Re-setup menu or just update items via iteration if we stored them
+        // For simplicity, we can rely on recreating or updating. 
+        // We'll fetch them dynamically.
+        if let menu = statusItem?.menu, let colorItem = menu.item(withTitle: "Color"), let submenu = colorItem.submenu {
+            for item in submenu.items {
+                if item.title == "Dark" {
+                    item.state = focusConfiguration.isDarkMode ? .on : .off
+                } else if item.title == "Light" {
+                    item.state = !focusConfiguration.isDarkMode ? .on : .off
+                }
+            }
         }
-    }
-    
-    @objc func selectBackgroundStyle(_ sender: NSMenuItem) {
-        guard let bgStyle = sender.representedObject as? BackgroundStyle else { return }
-        applyBackgroundStyle(bgStyle)
-    }
-    
-    func applyBackgroundStyle(_ bgStyle: BackgroundStyle) {
-        focusConfiguration.backgroundStyle = bgStyle
-        FocusConfiguration.current = focusConfiguration
-        
-        // Show overlay if it's hidden
-        if overlayWindow?.isVisible != true {
-            overlayShownTime = Date()
-            AnalyticsManager.shared.trackPaceViewShown()
-            overlayWindow?.orderFront(nil)
-            updateMenuState(overlayVisible: true)
-        }
-        
-        updateBackgroundStyleMenu()
     }
     
     func updateMenuState(overlayVisible: Bool) {
         if overlayVisible {
-            // Overlay is visible - uncheck "Turn Off", check the active mode
             toggleMenuItem?.state = .off
         } else {
-            // Overlay is hidden - check "Turn Off", uncheck all modes
             toggleMenuItem?.state = .on
         }
         updateFocusModeMenu()
+        updateStatusIcon(overlayVisible: overlayVisible)
     }
-    
+
+    func updateStatusIcon(overlayVisible: Bool) {
+        let symbolName = overlayVisible ? "eye" : "eye.slash"
+        statusItem?.button?.image = NSImage(systemSymbolName: symbolName, accessibilityDescription: "Pace")
+    }
+
     @objc func toggleOverlay() {
         if let window = overlayWindow {
             if window.isVisible {
@@ -607,134 +613,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
         }
     }
     
-    @objc func toggleFocusMode() {
-        guard let focusWindow = focusWindow else {
-            print("⚠️ focusWindow is nil!")
-            return
-        }
-
-        if isFocusModeActive {
-            print("❌ Hiding focus mode")
-            
-            // Track focus mode hidden
-            if let startTime = focusModeShownTime {
-                let duration = Date().timeIntervalSince(startTime)
-                AnalyticsManager.shared.trackFocusModeHidden(duration: duration)
-            }
-            
-            focusWindow.orderOut(nil)
-            isFocusModeActive = false
-            focusMenuItem?.title = "Show Focus Message"
-
-            // Restore overlay if it was visible before entering focus mode
-            if prevOverlayWasVisible {
-                overlayWindow?.orderFront(nil)
-                updateMenuState(overlayVisible: true)
-                NSApp.activate(ignoringOtherApps: true)       // 🪄 Reactivate app
-            }
-        } else {
-            print("✅ Showing focus mode")
-            
-            // Track focus mode shown
-            focusModeShownTime = Date()
-            AnalyticsManager.shared.trackFocusModeShown()
-
-            // remember whether overlay is visible so we can restore it on close
-            prevOverlayWasVisible = (overlayWindow?.isVisible == true)
-
-            if overlayWindow?.isVisible == true {
-                overlayWindow?.orderOut(nil)
-                updateMenuState(overlayVisible: false)
-            }
-            focusWindow.orderFront(nil)
-            focusWindow.makeKey()
-            NSApp.activate(ignoringOtherApps: true)
-            print("🎯 Window level: \(focusWindow.level.rawValue)")
-            print("🎯 Is key window: \(focusWindow.isKeyWindow)")
-            print("🎯 First responder: \(focusWindow.firstResponder.debugDescription)")
-            isFocusModeActive = true
-            focusMenuItem?.title = "Hide Focus Message"
-        }
-    }
-    
-    @objc func toggleFlashMode() {
-        // Toggle the Flash Mode state
-        isFlashModeActive.toggle()
-        
-        // Track flash mode toggle
-        AnalyticsManager.shared.trackFlashModeToggled(isActive: isFlashModeActive)
-        
-        // Update menu item checkmark state
-        flashMenuItem?.state = isFlashModeActive ? .on : .off
-        
-        if isFlashModeActive {
-            // Activating Flash Mode
-            showFlashBorder()
-            startFlashTimer()
-        } else {
-            // Deactivating Flash Mode
-            cancelFlashTimer()
-            // Reset menu title when deactivated
-            flashMenuItem?.title = "Flash"
-        }
-    }
-    
-    func updateFlashMenuTitle() {
-        guard let lastFlash = lastFlashTime else {
-            flashMenuItem?.title = "Flash"
-            return
-        }
-        
-        let formatter = DateFormatter()
-        formatter.timeStyle = .short
-        let timeString = formatter.string(from: lastFlash)
-        flashMenuItem?.title = "Flashed at \(timeString)"
-    }
-    
-    func showFlashBorder() {
-        guard let flashWindow = flashWindow else { return }
-        
-        // Track flash triggered
-        AnalyticsManager.shared.trackFlashTriggered()
-        
-        // Update last flash time
-        lastFlashTime = Date()
-        updateFlashMenuTitle()
-        
-        // Create new FlashBorderView with completion callback
-        let flashView = FlashBorderView(onComplete: { [weak self] in
-            // Hide window after animation completes
-            self?.flashWindow?.orderOut(nil)
-        })
-        
-        // Update window content with new view (to restart animation)
-        flashWindow.contentView = NSHostingView(rootView: flashView)
-        
-        // Order flashWindow to front
-        flashWindow.orderFront(nil)
-    }
-    
-    func startFlashTimer() {
-        // Cancel any existing timer first
-        cancelFlashTimer()
-        
-        // Create Timer with 25-minute interval (25 * 60 seconds)
-        flashTimer = Timer.scheduledTimer(
-            withTimeInterval: 25 * 60,
-            repeats: true
-        ) { [weak self] _ in
-            // Call showFlashBorder in timer callback
-            self?.showFlashBorder()
-        }
-    }
-    
-    func cancelFlashTimer() {
-        // Invalidate timer if it exists
-        flashTimer?.invalidate()
-        // Set flashTimer to nil
-        flashTimer = nil
-    }
-    
     @objc func showOnboarding() {
         guard let onboardingWindow = onboardingWindow else { return }
         
@@ -829,80 +707,6 @@ class OverlayWindow: NSWindow {
     }
 }
 
-class FocusWindow: NSWindow {
-    // keep a weak reference to the app delegate so the window can signal ESC
-    weak var appDelegate: AppDelegate?
-    
-    convenience init(appDelegate: AppDelegate) {
-        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        
-        self.init(
-            contentRect: screenRect,
-            styleMask: [.borderless, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        
-        self.appDelegate = appDelegate
-        
-        self.level = .statusBar
-        self.backgroundColor = .black
-        self.isOpaque = true
-        self.hasShadow = false
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        
-        self.setFrame(screenRect, display: true)
-        
-        self.contentView = NSHostingView(rootView: FocusModeView(appDelegate: appDelegate))
-    }
-    
-    // CRITICAL: Allow window to become key so it can receive keyboard input
-    override var canBecomeKey: Bool {
-        return true
-    }
-    
-    override var canBecomeMain: Bool {
-        return true
-    }
-    
-    // Close focus mode when the user presses ESC
-    // Use performKeyEquivalent to intercept before responder chain
-    override func performKeyEquivalent(with event: NSEvent) -> Bool {
-        // 53 is the keyCode for ESC
-        if event.keyCode == 53 {
-            appDelegate?.toggleFocusMode()
-            return true
-        }
-        return super.performKeyEquivalent(with: event)
-    }
-}
-
-class FlashWindow: NSWindow {
-    convenience init() {
-        let screenRect = NSScreen.main?.frame ?? CGRect(x: 0, y: 0, width: 1920, height: 1080)
-        
-        self.init(
-            contentRect: screenRect,
-            styleMask: [.borderless, .fullSizeContentView],
-            backing: .buffered,
-            defer: false
-        )
-        
-        // Configure window to be above everything but transparent and non-interactive
-        self.level = .screenSaver
-        self.backgroundColor = .clear
-        self.isOpaque = false
-        self.hasShadow = false
-        self.ignoresMouseEvents = true
-        self.collectionBehavior = [.canJoinAllSpaces, .fullScreenAuxiliary]
-        
-        self.setFrame(screenRect, display: true)
-        
-        // Initialize with FlashBorderView
-        self.contentView = NSHostingView(rootView: FlashBorderView(onComplete: {}))
-    }
-}
-
 class SidePanelWindow: NSWindow {
     weak var appDelegate: AppDelegate?
     
@@ -968,15 +772,11 @@ struct SidePanelView: View {
 
 struct CollapsedSidePanel: View {
     @ObservedObject var appDelegate: AppDelegate
+    @State private var isHovering: Bool = false
     
     // Determine bar color based on background style
     private var barColor: Color {
-        switch appDelegate.focusConfiguration.backgroundStyle {
-        case .black, .black70:
-            return Color.white
-        case .white, .white70:
-            return Color.black
-        }
+        return appDelegate.focusConfiguration.isDarkMode ? Color.white : Color.black
     }
     
     var body: some View {
@@ -985,17 +785,28 @@ struct CollapsedSidePanel: View {
         }) {
             RoundedRectangle(cornerRadius: 4)
                 .fill(barColor)
-                .frame(width: 8, height: 80)  // Doubled from 40 to 80
+                .frame(width: 8, height: 80)
         }
         .buttonStyle(PlainButtonStyle())
+        .opacity(isHovering ? 1.0 : 0.0)
         .padding(.trailing, 4)
+        .padding(.leading, 20) // Wider invisible hit area
+        .padding(.vertical, 20)
+        .contentShape(Rectangle())
+        .onHover { hovering in
+            withAnimation(.easeInOut(duration: 0.2)) {
+                isHovering = hovering
+            }
+        }
     }
 }
 
 struct ExpandedSidePanel: View {
     @ObservedObject var appDelegate: AppDelegate
+    @State private var showShapeSubmenu: Bool = false
     @State private var showSizeSubmenu: Bool = false
-    @State private var showBGSubmenu: Bool = false
+    @State private var showColorSubmenu: Bool = false
+    @State private var showSettingsSubmenu: Bool = false
     
     var body: some View {
         GeometryReader { geometry in
@@ -1023,61 +834,68 @@ struct ExpandedSidePanel: View {
                 Divider()
                     .background(Color.white.opacity(0.2))
                 
-                // ScrollView with max height of 40% screen height
+                // ScrollView
                 ScrollView {
                     VStack(alignment: .leading, spacing: 2) {
-                        // Turn Off button
-                        SidePanelButton(
-                            title: appDelegate.overlayWindow?.isVisible == true ? "Turn Off" : "Turn On",
-                            isChecked: appDelegate.overlayWindow?.isVisible != true,
-                            shortcut: "⌃⌥K"
-                        ) {
-                            appDelegate.toggleOverlay()
-                            appDelegate.collapseSidePanel()
-                        }
                         
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
-                    
-                    // Focus Modes
-                    ForEach(Array(FocusMode.allCases.enumerated()), id: \.element) { index, mode in
-                        SidePanelButton(
-                            title: mode.displayName,
-                            isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true,
-                            shortcut: index == 0 ? "⌃⌥O" : nil
-                        ) {
-                            appDelegate.applyFocusMode(mode)
-                            appDelegate.collapseSidePanel()
-                        }
-                    }
-                    
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
-                        
-                            // Size collapsible submenu
-                        Button(action: {
-                            withAnimation {
-                                showSizeSubmenu.toggle()
-                            }
-                        }) {
+                        // --- 1. Shape ---
+                        Button(action: { withAnimation { showShapeSubmenu.toggle() } }) {
                             HStack {
-                                Image(systemName: showSizeSubmenu ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .frame(width: 12)
-                                Text("Size")
+                                Image(systemName: "square.on.circle")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Shape")
                                     .font(.system(size: 13))
                                     .foregroundColor(.white)
                                 Spacer()
+                                Image(systemName: showShapeSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
-                    
+                        
+                        if showShapeSubmenu {
+                            ForEach(Array(FocusMode.allCases.enumerated()), id: \.element) { index, mode in
+                                SidePanelButton(
+                                    title: mode.displayName,
+                                    isChecked: mode == appDelegate.focusConfiguration.mode && appDelegate.overlayWindow?.isVisible == true,
+                                    isIndented: true,
+                                    shortcut: index == 0 ? "⌃⌥O" : nil
+                                ) {
+                                    appDelegate.applyFocusMode(mode)
+                                    appDelegate.collapseSidePanel()
+                                }
+                            }
+                        }
+                        
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
+                        
+                        // --- 2. Size ---
+                        Button(action: { withAnimation { showSizeSubmenu.toggle() } }) {
+                            HStack {
+                                Image(systemName: "arrow.up.left.and.down.right.and.arrow.up.right.and.down.left")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Size")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Image(systemName: showSizeSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
                         if showSizeSubmenu {
                             ForEach(Array(FocusSize.allCases.enumerated()), id: \.element) { index, size in
                                 SidePanelButton(
@@ -1092,121 +910,162 @@ struct ExpandedSidePanel: View {
                             }
                         }
                         
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
                         
-                        // Background collapsible submenu
-                        Button(action: {
-                            withAnimation {
-                                showBGSubmenu.toggle()
-                            }
-                        }) {
+                        // --- 3. Color ---
+                        Button(action: { withAnimation { showColorSubmenu.toggle() } }) {
                             HStack {
-                                Image(systemName: showBGSubmenu ? "chevron.down" : "chevron.right")
-                                    .font(.system(size: 10))
-                                    .foregroundColor(.white.opacity(0.6))
-                                    .frame(width: 12)
-                                Text("BG")
+                                Image(systemName: "paintpalette")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Color")
                                     .font(.system(size: 13))
                                     .foregroundColor(.white)
                                 Spacer()
+                                Image(systemName: showColorSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
                             }
                             .padding(.horizontal, 12)
                             .padding(.vertical, 5)
                             .contentShape(Rectangle())
                         }
                         .buttonStyle(PlainButtonStyle())
-                    
-                        if showBGSubmenu {
-                            ForEach(Array(BackgroundStyle.allCases.enumerated()), id: \.element) { index, bgStyle in
-                                SidePanelButton(
-                                    title: bgStyle.displayName,
-                                    isChecked: bgStyle == appDelegate.focusConfiguration.backgroundStyle,
-                                    isIndented: true,
-                                    shortcut: index == 0 ? "⌃⌥L" : nil
-                                ) {
-                                    appDelegate.applyBackgroundStyle(bgStyle)
-                                    appDelegate.collapseSidePanel()
-                                }
+                        
+                        if showColorSubmenu {
+                            SidePanelButton(title: "Dark", isChecked: appDelegate.focusConfiguration.isDarkMode, isIndented: true) {
+                                appDelegate.applyDarkMode(true)
+                                appDelegate.collapseSidePanel()
+                            }
+                            SidePanelButton(title: "Light", isChecked: !appDelegate.focusConfiguration.isDarkMode, isIndented: true) {
+                                appDelegate.applyDarkMode(false)
+                                appDelegate.collapseSidePanel()
                             }
                         }
                         
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
                         
-                        // Focus Message
+                        // --- 4. Opacity ---
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: "circle.lefthalf.filled")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Opacity")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("\(Int(appDelegate.focusConfiguration.opacity * 100))%")
+                                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 12)
+                            
+                            Slider(value: Binding(
+                                get: { appDelegate.focusConfiguration.opacity },
+                                set: { appDelegate.applyOpacity(zsh) }
+                            ), in: 0.1...1.0)
+                            .padding(.horizontal, 12)
+                        }
+                        .padding(.vertical, 5)
+                        
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
+                        
+                        // --- 5. Blur ---
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Image(systemName: "drop")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Blur")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Text("\(Int(appDelegate.focusConfiguration.blurRadius))px")
+                                    .font(.system(size: 11, weight: .regular, design: .monospaced))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 12)
+                            
+                            Slider(value: Binding(
+                                get: { appDelegate.focusConfiguration.blurRadius },
+                                set: { appDelegate.applyBlurRadius(zsh) }
+                            ), in: 0...20)
+                            .padding(.horizontal, 12)
+                        }
+                        .padding(.vertical, 5)
+                        
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
+                        
+                        // --- 6. Settings ---
+                        Button(action: { withAnimation { showSettingsSubmenu.toggle() } }) {
+                            HStack {
+                                Image(systemName: "gearshape")
+                                    .font(.system(size: 12))
+                                    .foregroundColor(.white)
+                                    .frame(width: 16)
+                                Text("Settings")
+                                    .font(.system(size: 13))
+                                    .foregroundColor(.white)
+                                Spacer()
+                                Image(systemName: showSettingsSubmenu ? "chevron.down" : "chevron.right")
+                                    .font(.system(size: 10))
+                                    .foregroundColor(.white.opacity(0.6))
+                            }
+                            .padding(.horizontal, 12)
+                            .padding(.vertical, 5)
+                            .contentShape(Rectangle())
+                        }
+                        .buttonStyle(PlainButtonStyle())
+                        
+                        if showSettingsSubmenu {
+                            SidePanelButton(title: "How to Use", isChecked: false, isIndented: true) {
+                                appDelegate.showOnboarding()
+                                appDelegate.collapseSidePanel()
+                            }
+                            SidePanelButton(title: "Check for Updates...", isChecked: false, isIndented: true) {
+                                appDelegate.checkForUpdates()
+                                appDelegate.collapseSidePanel()
+                            }
+                            SidePanelButton(title: "Quit Pace", isChecked: false, isIndented: true) {
+                                appDelegate.quitApp()
+                            }
+                        }
+                        
+                        Divider().background(Color.white.opacity(0.2)).padding(.vertical, 2)
+                        
+                        // --- 7. Hide Overlay ---
                         SidePanelButton(
-                            title: "Show Focus Message",
+                            title: appDelegate.overlayWindow?.isVisible == true ? "Hide Overlay" : "Show Overlay",
                             isChecked: false,
-                            shortcut: "⌃⌥F"
+                            shortcut: "⌃⌥K"
                         ) {
-                            appDelegate.toggleFocusMode()
+                            appDelegate.toggleOverlay()
                             appDelegate.collapseSidePanel()
                         }
                         
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
-                        
-                        // Flash
-                        SidePanelButton(
-                            title: appDelegate.isFlashModeActive ? "Flash (Active)" : "Flash",
-                            isChecked: appDelegate.isFlashModeActive
-                        ) {
-                            appDelegate.toggleFlashMode()
-                            appDelegate.collapseSidePanel()
-                        }
-                        
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
-                        
-                        // Extras
-                        SidePanelButton(
-                            title: "How to Use",
-                            isChecked: false
-                        ) {
-                            appDelegate.showOnboarding()
-                            appDelegate.collapseSidePanel()
-                        }
-                        
-                        SidePanelButton(
-                            title: "Check for Updates...",
-                            isChecked: false
-                        ) {
-                            appDelegate.checkForUpdates()
-                            appDelegate.collapseSidePanel()
-                        }
-                        
-                        Divider()
-                            .background(Color.white.opacity(0.2))
-                            .padding(.vertical, 2)
-                        
-                        // Quit
-                        SidePanelButton(
-                            title: "Quit Pace",
-                            isChecked: false
-                        ) {
-                            appDelegate.quitApp()
-                        }
+                        Spacer().frame(height: 10)
                     }
-                    .padding(.vertical, 6)
+                    .padding(.vertical, 4)
                 }
-                .frame(maxHeight: geometry.size.height * 0.32)  // Max 32% of screen height - requires scroll for Quit
+                .frame(maxHeight: geometry.size.height * 0.7)
                 }
-                .frame(width: 220)
+                .frame(width: 200)
                 .background(
-                    RoundedRectangle(cornerRadius: 12)
+                    RoundedRectangle(cornerRadius: 8)
                         .fill(Color.black.opacity(0.85))
-                        .shadow(color: .black.opacity(0.3), radius: 10, x: -2, y: 2)
                 )
-                .padding(.trailing, 8)
+                .overlay(
+                    RoundedRectangle(cornerRadius: 8)
+                        .stroke(Color.white.opacity(0.1), lineWidth: 1)
+                )
+                .padding(.trailing, 10)
                 
                 Spacer()  // Center vertically
             }
-            .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
     }
 }
@@ -1344,45 +1203,3 @@ struct OnboardingContainerView: View {
     }
 }
 
-// FlashBorderView - Task 3.1: Structure with state and callback
-struct FlashBorderView: View {
-    @State private var opacity: Double = 0.0
-    @State private var pulseCount: Int = 0
-    var onComplete: () -> Void
-    
-    var body: some View {
-        // Border stroke with gradient from top-left (white) to bottom-right (red)
-        Rectangle()
-            .strokeBorder(
-                LinearGradient(
-                    gradient: Gradient(colors: [Color.white, Color.red]),
-                    startPoint: .topLeading,
-                    endPoint: .bottomTrailing
-                ),
-                lineWidth: 8
-            )
-            .opacity(opacity)
-            .edgesIgnoringSafeArea(.all)
-            .onAppear {
-                startPulseAnimation()
-            }
-    }
-    
-    // Task 3.3: Implement pulse animation
-    private func startPulseAnimation() {
-        // Reset state
-        opacity = 0.0
-        pulseCount = 0
-        
-        // Create repeating animation: 6 pulses over 3 seconds = 0.5s per pulse
-        // Each pulse is 0.25s fade in + 0.25s fade out
-        withAnimation(.easeInOut(duration: 0.25).repeatCount(12, autoreverses: true)) {
-            opacity = 0.7  // More opaque so it's clearly visible
-        }
-        
-        // Call onComplete after 3 seconds (6 complete pulses)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 3.0) {
-            onComplete()
-        }
-    }
-}

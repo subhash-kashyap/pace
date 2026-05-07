@@ -22,10 +22,20 @@ struct OverlayContentView: View {
     var body: some View {
         GeometryReader { geo in
             ZStack {
-                // Use the selected background style
-                Rectangle()
-                    .fill(appDelegate.focusConfiguration.backgroundStyle.color)
-                    .mask(
+                let config = appDelegate.focusConfiguration
+                let baseColor = config.isDarkMode ? Color.black : Color.white
+                
+                Group {
+                    if config.blurRadius > 0 {
+                        ZStack {
+                            VisualEffectView(material: config.isDarkMode ? .hudWindow : .light, blendingMode: .behindWindow)
+                            Rectangle().fill(baseColor.opacity(config.opacity))
+                        }
+                    } else {
+                        Rectangle().fill(baseColor.opacity(config.opacity))
+                    }
+                }
+                .mask(
                         Rectangle()
                             .overlay(
                                 Path { path in
@@ -50,7 +60,9 @@ struct OverlayContentView: View {
                     .animation(.easeOut(duration: 0.15), value: mouseTracker.mouseX)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.mode)
                     .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.size)
-                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.backgroundStyle)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.opacity)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.isDarkMode)
+                    .animation(.easeOut(duration: 0.3), value: appDelegate.focusConfiguration.blurRadius)
                 
                 // GridOverlay removed
             }
@@ -136,115 +148,3 @@ class GlobalMouseTracker: ObservableObject {
     }
 }
 
-struct FocusModeView: View {
-    @ObservedObject var appDelegate: AppDelegate
-    
-    var body: some View {
-        ZStack {
-            Color.black.edgesIgnoringSafeArea(.all)
-            
-            VStack {
-                HStack {
-                    Spacer()
-                    Button(action: {
-                        print("❌ Close button clicked")
-                        appDelegate.toggleFocusMode()
-                    }) {
-                        Image(systemName: "xmark.circle.fill")
-                            .font(.system(size: 24))
-                            .foregroundColor(.white.opacity(0.5))
-                    }
-                    .buttonStyle(PlainButtonStyle())
-                    .padding()
-                }
-                
-                Spacer()
-                
-                VStack(spacing: 20) {
-                    Text("Write a focused message")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundColor(.white.opacity(0.4))
-                    
-                    SimpleTextView(text: $appDelegate.focusText)
-                        .frame(width: 700, height: 450)
-                }
-                
-                Spacer()
-            }
-        }
-        .onAppear {
-            print("🟢 FocusModeView appeared")
-        }
-    }
-}
-
-struct SimpleTextView: NSViewRepresentable {
-    @Binding var text: String
-
-    func makeNSView(context: Context) -> NSScrollView {
-        let textView = NSTextView()
-        textView.delegate = context.coordinator
-        textView.backgroundColor = .black           // Black background
-        textView.textColor = .white                 // White text
-        textView.insertionPointColor = .white       // White cursor
-        textView.font = .monospacedSystemFont(ofSize: 16, weight: .regular)
-        textView.usesAdaptiveColorMappingForDarkAppearance = false
-        textView.isRichText = false
-        textView.allowsUndo = true
-        textView.isHorizontallyResizable = false
-        textView.isVerticallyResizable = true
-        textView.autoresizingMask = [.width]
-
-        let paragraphStyle = NSMutableParagraphStyle()
-        paragraphStyle.lineSpacing = 4
-
-        let attrs: [NSAttributedString.Key: Any] = [
-            .foregroundColor: NSColor.white,
-            .font: textView.font ?? NSFont.monospacedSystemFont(ofSize: 16, weight: .regular),
-            .paragraphStyle: paragraphStyle
-        ]
-        textView.typingAttributes = attrs
-
-        // Initialize text
-        textView.string = text
-
-        // Wrap in scroll view
-        let scrollView = NSScrollView()
-        scrollView.documentView = textView
-        scrollView.hasVerticalScroller = true
-        scrollView.autohidesScrollers = true
-        scrollView.drawsBackground = true
-        scrollView.backgroundColor = textView.backgroundColor
-        scrollView.wantsLayer = true
-        scrollView.layer?.cornerRadius = 6
-        scrollView.layer?.backgroundColor = textView.backgroundColor.cgColor
-
-        // Ensure textView is focused
-        DispatchQueue.main.async {
-            textView.window?.makeFirstResponder(textView)
-        }
-
-        return scrollView
-    }
-
-    func updateNSView(_ scrollView: NSScrollView, context: Context) {
-        guard let textView = scrollView.documentView as? NSTextView else { return }
-        if textView.string != text {
-            let selectedRange = textView.selectedRange()
-            textView.string = text
-            textView.setSelectedRange(selectedRange)
-        }
-    }
-
-    func makeCoordinator() -> Coordinator { Coordinator(self) }
-
-    class Coordinator: NSObject, NSTextViewDelegate {
-        var parent: SimpleTextView
-        init(_ parent: SimpleTextView) { self.parent = parent }
-
-        func textDidChange(_ notification: Notification) {
-            guard let textView = notification.object as? NSTextView else { return }
-            parent.text = textView.string
-        }
-    }
-}

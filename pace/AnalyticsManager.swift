@@ -24,9 +24,15 @@ class AnalyticsManager {
         }
         
         let config = PostHogConfig(apiKey: apiKey, host: host)
-        config.debug = true  // Enable debug logging
-        config.flushAt = 1   // Send events immediately (for testing)
-        config.flushIntervalSeconds = 10  // Flush every 10 seconds
+        #if DEBUG
+        config.debug = true
+        config.flushAt = 1   // Send events immediately for testing
+        config.flushIntervalSeconds = 5
+        #else
+        config.debug = false
+        config.flushAt = 20
+        config.flushIntervalSeconds = 30
+        #endif
         
         PostHogSDK.shared.setup(config)
         
@@ -123,29 +129,7 @@ class AnalyticsManager {
         currentMode = nil
     }
     
-    // MARK: - Focus Mode Tracking
-    
-    func trackFocusModeShown() {
-        PostHogSDK.shared.capture("focus_mode_shown")
-    }
-    
-    func trackFocusModeHidden(duration: TimeInterval) {
-        PostHogSDK.shared.capture("focus_mode_hidden", properties: [
-            "duration_seconds": duration
-        ])
-    }
-    
-    // MARK: - Flash Mode Tracking
-    
-    func trackFlashModeToggled(isActive: Bool) {
-        PostHogSDK.shared.capture("flash_mode_toggled", properties: [
-            "is_active": isActive
-        ])
-    }
-    
-    func trackFlashTriggered() {
-        PostHogSDK.shared.capture("flash_triggered")
-    }
+
     
     // MARK: - Onboarding Tracking
     

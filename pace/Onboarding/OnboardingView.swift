@@ -18,9 +18,6 @@ struct OnboardingView: View {
                     } else if currentPage == 2 {
                         HowToUseScreen()
                             .transition(.opacity)
-                    } else if currentPage == 3 {
-                        FeaturesScreen()
-                            .transition(.opacity)
                     }
                 }
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -51,7 +48,7 @@ struct OnboardingView: View {
                     
                     // Page indicators
                     HStack(spacing: 8) {
-                        ForEach(1...3, id: \.self) { page in
+                        ForEach(1...2, id: \.self) { page in
                             Circle()
                                 .fill(page == currentPage ? Color.black : Color.black.opacity(0.3))
                                 .frame(width: 8, height: 8)
@@ -61,7 +58,7 @@ struct OnboardingView: View {
                     Spacer()
                     
                     Button(action: {
-                        if currentPage < 3 {
+                        if currentPage < 2 {
                             withAnimation {
                                 currentPage += 1
                             }
@@ -72,7 +69,7 @@ struct OnboardingView: View {
                             onComplete()
                         }
                     }) {
-                        Text(currentPage == 3 ? "Get Started" : "Next")
+                        Text(currentPage == 2 ? "Get Started" : "Next")
                             .foregroundColor(.white)
                             .fontWeight(.medium)
                             .padding(.horizontal, 24)
