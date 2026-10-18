@@ -1,7 +1,7 @@
 ---
 title: "feat: Pace for Chrome — lightweight rectangle focus overlay extension"
 type: feat
-status: active
+status: completed
 date: 2026-10-18
 depth: standard
 ---

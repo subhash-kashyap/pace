@@ -14,6 +14,7 @@ test('normalizeSettings returns defaults for missing input', () => {
 
 test('normalizeSettings repairs invalid values', () => {
   assert.equal(Core.normalizeSettings({ size: 'XL' }).size, 'M');
+  assert.equal(Core.normalizeSettings({ size: ['L'] }).size, 'M', 'non-string size is rejected');
   assert.equal(Core.normalizeSettings({ opacity: 5 }).opacity, 1);
   assert.equal(Core.normalizeSettings({ opacity: 0 }).opacity, 0.1);
   assert.equal(Core.normalizeSettings({ opacity: 'abc' }).opacity, 0.7);

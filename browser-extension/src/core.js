@@ -44,7 +44,7 @@
     var blur = toFiniteNumber(src.blurRadius);
     return {
       enabled: src.enabled === true,
-      size: Object.prototype.hasOwnProperty.call(SIZES, src.size) ? src.size : DEFAULTS.size,
+      size: typeof src.size === 'string' && Object.prototype.hasOwnProperty.call(SIZES, src.size) ? src.size : DEFAULTS.size,
       opacity: opacity === null ? DEFAULTS.opacity : clamp(opacity, OPACITY_MIN, OPACITY_MAX),
       blurRadius: blur === null ? DEFAULTS.blurRadius : clamp(blur, BLUR_MIN, BLUR_MAX),
       isDarkMode: typeof src.isDarkMode === 'boolean' ? src.isDarkMode : DEFAULTS.isDarkMode

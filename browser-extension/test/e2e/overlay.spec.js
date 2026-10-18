@@ -225,3 +225,30 @@ test('re-injection on update keeps exactly one live overlay', async ({ context, 
   await setSettings(context, { enabled: false });
   await expect.poll(async () => (await overlayState(page)).count).toBe(0);
 });
+
+test('overlay re-attaches after a page script removes it', async ({ context, page }) => {
+  await enabledPage(context, page);
+  await page.evaluate(() => document.documentElement.replaceChildren(document.createElement('body')));
+  expect((await overlayState(page)).count).toBe(0);
+  await page.mouse.move(400, 420);
+  await page.mouse.move(400, 400);
+  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
+  const s = await settledOverlay(page, (s) => near(s.topBottomEdge, 250));
+  expect(s.topBottomEdge).toBeCloseTo(250, 0);
+});
+
+test('turning Pace off also clears a leftover host from an orphaned instance', async ({ context, page }) => {
+  await enabledPage(context, page);
+  // Simulate a stale host left by an orphaned script in addition to the live one.
+  await page.evaluate(() => document.documentElement.appendChild(document.createElement('pace-focus-overlay')));
+  expect((await overlayState(page)).count).toBe(2);
+  await setSettings(context, { enabled: false });
+  await expect.poll(async () => (await overlayState(page)).count).toBe(0);
+});
+
+test('does not mount over PDFs (the viewer swallows mouse events)', async ({ context, page }) => {
+  await setSettings(context, { enabled: true });
+  await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
+  await page.waitForTimeout(1500);
+  expect((await overlayState(page)).count).toBe(0);
+});

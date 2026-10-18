@@ -8,6 +8,8 @@
 
   var settings = Core.normalizeSettings(null);
   var pendingWrite = 0;
+  var loaded = false;
+  var earlyPatch = null; // changes made before stored settings finished loading
 
   var els = {
     enabled: document.getElementById('enabled'),
@@ -38,6 +40,7 @@
   }
 
   function write() {
+    if (!loaded) return Promise.resolve();
     var update = {};
     update[KEY] = settings;
     return chrome.storage.local.set(update);
@@ -52,10 +55,19 @@
     });
   }
 
+  function flushWrite() {
+    if (!pendingWrite) return;
+    cancelAnimationFrame(pendingWrite);
+    pendingWrite = 0;
+    write();
+  }
+
   // Like the macOS apply* methods: changing any setting turns the overlay on.
   function change(patch, throttled) {
+    patch = Object.assign({}, patch);
+    if (!Object.prototype.hasOwnProperty.call(patch, 'enabled')) patch.enabled = true;
+    if (!loaded) earlyPatch = Object.assign(earlyPatch || {}, patch);
     var next = Object.assign({}, settings, patch);
-    if (!Object.prototype.hasOwnProperty.call(patch, 'enabled')) next.enabled = true;
     settings = Core.normalizeSettings(next);
     render();
     return throttled ? scheduleWrite() : write();
@@ -76,6 +88,14 @@
 
   els.blur.addEventListener('input', function () {
     change({ blurRadius: Number(els.blur.value) }, true);
+  });
+
+  // Commit the final slider value immediately (rAF may never run if the popup closes).
+  els.opacity.addEventListener('change', flushWrite);
+  els.blur.addEventListener('change', flushWrite);
+  window.addEventListener('pagehide', flushWrite);
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'hidden') flushWrite();
   });
 
   els.analytics.addEventListener('change', function () {
@@ -116,7 +136,9 @@
       if (!tab || tab.id === undefined) return showNotice(cantShow());
       return Promise.resolve(chrome.extension.isAllowedFileSchemeAccess()).then(function (fileAccess) {
         return chrome.tabs.sendMessage(tab.id, { type: 'pace_ping' }).then(function (reply) {
-          showNotice(reply ? '' : noReply(tab.url, fileAccess));
+          if (!reply) return showNotice(noReply(tab.url, fileAccess));
+          if (reply.unsupported) return showNotice(cantShow());
+          showNotice(reply.enabled && !reply.mounted ? "Pace isn't showing here. Try reloading this tab." : '');
         }, function () {
           showNotice(noReply(tab.url, fileAccess));
         });
@@ -133,9 +155,12 @@
   }
 
   chrome.storage.local.get([KEY, ANALYTICS_ENABLED_KEY]).then(function (r) {
-    settings = Core.normalizeSettings(r[KEY]);
+    settings = Core.normalizeSettings(Object.assign({}, r[KEY], earlyPatch));
     els.analytics.checked = r[ANALYTICS_ENABLED_KEY] !== false;
+    loaded = true;
     render();
+    if (earlyPatch) write();
+    earlyPatch = null;
   });
 
   render();

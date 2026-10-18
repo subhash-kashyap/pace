@@ -22,7 +22,7 @@ Run this in **real Google Chrome** with the unpacked extension loaded (see `../R
 - [ ] A `file://` HTML page with file access off → the same notice.
 - [ ] A YouTube embed or other cross-origin iframe page: note how the band behaves over the iframe (expected: it pauses).
 - [ ] A same-origin iframe page: note the behavior.
-- [ ] A PDF opened in Chrome's viewer: note the behavior (expected: no overlay; the popup suggests a reload or shows the notice).
+- [ ] A PDF opened in Chrome's viewer: note the behavior (expected: no overlay, and the popup shows the "can't show on this page" notice).
 - [ ] Fullscreen a video: note that the overlay isn't drawn over browser fullscreen.
 - [ ] Print preview (Cmd+P): no overlay in the preview.
 - [ ] Click **reload** on the extension card in `chrome://extensions` with Pace on and tabs open: each tab ends with exactly one working overlay (or none until the next mouse move, then one). Turning Pace off afterwards removes it everywhere.

@@ -98,3 +98,27 @@ test('every control has an accessible name', async ({ context, extensionId }) =>
       .map((el) => el.outerHTML));
   expect(unnamed).toEqual([]);
 });
+
+test('slider change commits immediately without waiting for a frame', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  await popup.evaluate(() => {
+    const el = document.getElementById('blur');
+    el.value = '7';
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+  });
+  await popup.close();
+  await expect.poll(async () => (await settings(context)).blurRadius).toBe(7);
+});
+
+test('a change made before stored settings load keeps the other saved values', async ({ context, extensionId }) => {
+  await expect.poll(() => settings(context)).toBeTruthy(); // install has seeded defaults
+  await context.serviceWorkers()[0].evaluate(() => chrome.storage.local.set({
+    paceSettings: { enabled: false, size: 'M', opacity: 0.35, blurRadius: 6, isDarkMode: false }
+  }));
+  const popup = await context.newPage();
+  // Click as early as possible after the DOM exists.
+  await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`, { waitUntil: 'commit' });
+  await popup.getByRole('button', { name: 'Large' }).click();
+  await expect.poll(() => settings(context)).toEqual({ enabled: true, size: 'L', opacity: 0.35, blurRadius: 6, isDarkMode: false });
+});

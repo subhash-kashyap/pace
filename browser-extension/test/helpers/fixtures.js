@@ -8,10 +8,17 @@ const EXTENSION_DIR = path.resolve(__dirname, '..', '..');
 const FIXTURE_DIR = path.resolve(__dirname, '..', 'e2e', 'fixtures');
 const FIXTURE_ORIGIN = 'https://pace.test';
 const SETTINGS_KEY = 'paceSettings';
+const MINIMAL_PDF = Buffer.from(
+  '%PDF-1.1\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n' +
+  '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 300]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF'
+);
 
 async function routeFixtures(context) {
   await context.route(`${FIXTURE_ORIGIN}/**`, async (route) => {
     const { pathname } = new URL(route.request().url());
+    if (pathname.endsWith('.pdf')) {
+      return route.fulfill({ status: 200, contentType: 'application/pdf', body: MINIMAL_PDF });
+    }
     const file = path.join(FIXTURE_DIR, path.basename(pathname) || 'article.html');
     if (!fs.existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
     return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: fs.readFileSync(file) });

@@ -15,6 +15,10 @@
   var pendingY = null;
   var rafId = 0;
   var dead = false;
+  var seenChange = false;
+  // Captured once: an orphaned instance keeps its own (now invalid) runtime even if the world is reused.
+  var runtime = null;
+  try { runtime = chrome.runtime; } catch (e) { /* no extension context */ }
 
   var STYLE = [
     ':host { all: initial; }',
@@ -46,9 +50,26 @@
 
   function contextAlive() {
     try {
-      return !!(globalThis.chrome && chrome.runtime && chrome.runtime.id);
+      return !!(runtime && runtime.id);
     } catch (e) {
       return false;
+    }
+  }
+
+  // Chrome's PDF viewer swallows mouse events, so a band there could never move.
+  function unsupportedDocument() {
+    return document.contentType === 'application/pdf';
+  }
+
+  function removeAllHosts() {
+    var hosts = document.querySelectorAll(HOST_TAG);
+    for (var i = 0; i < hosts.length; i++) hosts[i].remove();
+  }
+
+  // Page scripts (hydration fallbacks, replaceChildren, document.write) can drop our host; put it back.
+  function ensureAttached() {
+    if (settings.enabled && host && !host.isConnected && document.documentElement) {
+      document.documentElement.appendChild(host);
     }
   }
 
@@ -74,6 +95,7 @@
   function frame() {
     rafId = 0;
     if (!contextAlive()) return teardown();
+    ensureAttached();
     if (pendingY === null) return;
     if (mouseY !== null && Math.abs(pendingY - mouseY) < MOVE_THRESHOLD) return;
     mouseY = pendingY;
@@ -87,14 +109,31 @@
 
   function onResize() {
     if (!contextAlive()) return teardown();
+    ensureAttached();
     applyPosition();
+  }
+
+  function refresh() {
+    if (!contextAlive()) return teardown();
+    chrome.storage.local.get(Core.SETTINGS_KEY).then(function (r) { render(r[Core.SETTINGS_KEY]); }, function () {});
+  }
+
+  // bfcache restores can miss storage events while frozen; re-read settings.
+  function onPageShow(event) {
+    if (event.persisted) refresh();
+  }
+
+  function onVisibilityChange() {
+    if (document.visibilityState === 'visible' && !contextAlive()) teardown();
   }
 
   function mount() {
     if (host && host.isConnected) return;
+    var root = document.documentElement;
+    // Only HTML documents (not SVG/XML or the PDF viewer) can host the overlay.
+    if (!root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml' || unsupportedDocument()) return;
     // Replace any host left behind by an orphaned script (extension update/reload).
-    var stale = document.querySelectorAll(HOST_TAG);
-    for (var i = 0; i < stale.length; i++) stale[i].remove();
+    removeAllHosts();
 
     host = document.createElement(HOST_TAG);
     host.setAttribute('aria-hidden', 'true');
@@ -111,7 +150,7 @@
     shadow.append(style, top, bottom);
     panels = { top: top, bottom: bottom };
 
-    (document.documentElement || document.body).appendChild(host);
+    root.appendChild(host);
     window.addEventListener('mousemove', onMouseMove, { capture: true, passive: true });
     window.addEventListener('resize', onResize, { passive: true });
     applyStyle();
@@ -123,6 +162,7 @@
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
     if (host) host.remove();
+    removeAllHosts(); // also clears a stale host from an orphaned instance
     host = null;
     panels = null;
   }
@@ -130,6 +170,8 @@
   function teardown() {
     dead = true;
     unmount();
+    window.removeEventListener('pageshow', onPageShow);
+    document.removeEventListener('visibilitychange', onVisibilityChange);
     try { chrome.storage.onChanged.removeListener(onStorageChanged); } catch (e) { /* context gone */ }
     try { chrome.runtime.onMessage.removeListener(onMessage); } catch (e) { /* context gone */ }
   }
@@ -140,7 +182,7 @@
     if (settings.enabled) {
       if (!host || !host.isConnected) {
         host = null;
-        mount();
+        try { mount(); } catch (e) { unmount(); }
       } else {
         applyStyle();
       }
@@ -152,24 +194,28 @@
   function onStorageChanged(changes, area) {
     if (area !== 'local' || !changes[Core.SETTINGS_KEY]) return;
     if (!contextAlive()) return teardown();
+    seenChange = true;
     render(changes[Core.SETTINGS_KEY].newValue);
   }
 
   function onMessage(message, sender, sendResponse) {
     if (message && message.type === 'pace_ping') {
-      sendResponse({ mounted: !!(host && host.isConnected), enabled: settings.enabled });
+      sendResponse({ mounted: !!(host && host.isConnected), enabled: settings.enabled, unsupported: unsupportedDocument() });
     }
   }
 
   globalThis.__paceContent = { alive: function () { return !dead && contextAlive(); } };
 
   try {
+    removeAllHosts(); // a fresh instance never inherits an orphan's overlay
     chrome.storage.onChanged.addListener(onStorageChanged);
     chrome.runtime.onMessage.addListener(onMessage);
+    window.addEventListener('pageshow', onPageShow);
+    document.addEventListener('visibilitychange', onVisibilityChange);
     chrome.storage.local.get(Core.SETTINGS_KEY).then(function (result) {
-      render(result[Core.SETTINGS_KEY]);
+      if (!seenChange) render(result[Core.SETTINGS_KEY]);
     }, function () {
-      render(null);
+      if (!seenChange) render(null);
     });
   } catch (e) {
     teardown();
