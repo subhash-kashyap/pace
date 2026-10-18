@@ -4,7 +4,8 @@
 
   var Core = globalThis.PaceCore;
   var KEY = Core.SETTINGS_KEY;
-  var ANALYTICS_ENABLED_KEY = 'analyticsEnabled';
+  // The preview is a ~1:8 miniature of the page, so the band shrinks with it.
+  var PREVIEW_SCALE = 0.125;
 
   var settings = Core.normalizeSettings(null);
   var pendingWrite = 0;
@@ -18,7 +19,8 @@
     opacityValue: document.getElementById('opacity-value'),
     blur: document.getElementById('blur'),
     blurValue: document.getElementById('blur-value'),
-    analytics: document.getElementById('analytics'),
+    panel: document.querySelector('.panel'),
+    preview: document.getElementById('preview'),
     groups: document.querySelectorAll('.segmented')
   };
 
@@ -29,6 +31,10 @@
     els.opacityValue.textContent = opacityPct + '%';
     els.blur.value = String(settings.blurRadius);
     els.blurValue.textContent = settings.blurRadius + 'px';
+    // Filled portion of each slider track.
+    els.opacity.style.setProperty('--fill', ((opacityPct - 10) / 90) * 100 + '%');
+    els.blur.style.setProperty('--fill', (settings.blurRadius / 20) * 100 + '%');
+    renderPreview();
     els.groups.forEach(function (group) {
       var current = String(settings[group.dataset.setting]);
       group.querySelectorAll('button').forEach(function (btn) {
@@ -37,6 +43,15 @@
         btn.tabIndex = on ? 0 : -1;
       });
     });
+  }
+
+  // Mirror the overlay in the miniature page so every control shows its effect.
+  function renderPreview() {
+    var style = els.panel.style;
+    els.panel.classList.toggle('is-on', settings.enabled);
+    style.setProperty('--dim', Core.dimColor(settings.isDarkMode, settings.opacity));
+    style.setProperty('--dim-blur', Core.blurFilter(settings.blurRadius * PREVIEW_SCALE * 2));
+    style.setProperty('--band', Core.bandHeight(settings.size) * PREVIEW_SCALE + 'px');
   }
 
   function write() {
@@ -104,10 +119,13 @@
     if (document.visibilityState === 'hidden') flushWrite();
   });
 
-  els.analytics.addEventListener('change', function () {
-    var update = {};
-    update[ANALYTICS_ENABLED_KEY] = els.analytics.checked;
-    chrome.storage.local.set(update);
+  // Hovering the preview moves its band, like moving the mouse over a page.
+  els.preview.addEventListener('pointermove', function (event) {
+    var rect = els.preview.getBoundingClientRect();
+    els.panel.style.setProperty('--band-y', (event.clientY - rect.top) + 'px');
+  });
+  els.preview.addEventListener('pointerleave', function () {
+    els.panel.style.removeProperty('--band-y');
   });
 
   els.groups.forEach(function (group) {
@@ -162,7 +180,6 @@
 
   function onLoaded(r) {
     settings = Core.normalizeSettings(Object.assign({}, r[KEY], earlyPatch));
-    els.analytics.checked = r[ANALYTICS_ENABLED_KEY] !== false;
     loaded = true;
     render();
     if (earlyPatch) write();
@@ -170,7 +187,7 @@
   }
 
   // If the read fails, fall back to defaults so the controls still save instead of silently dropping writes.
-  chrome.storage.local.get([KEY, ANALYTICS_ENABLED_KEY]).then(onLoaded, function () { onLoaded({}); });
+  chrome.storage.local.get(KEY).then(onLoaded, function () { onLoaded({}); });
 
   render();
   checkActiveTab();

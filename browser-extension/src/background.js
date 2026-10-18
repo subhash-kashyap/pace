@@ -7,7 +7,6 @@ importScripts('core.js');
 
   var Core = root.PaceCore;
   var ANALYTICS_ID_KEY = 'paceAnalyticsId';
-  var ANALYTICS_ENABLED_KEY = 'analyticsEnabled';
   var TIMESTAMPS_KEY = 'paceAnalyticsTimestamps';
 
   var CAPTURE_TIMEOUT_MS = 5000;
@@ -89,13 +88,11 @@ importScripts('core.js');
   function deliver(events) {
     return Promise.all([
       loadConfig(),
-      chrome.storage.local.get(ANALYTICS_ENABLED_KEY),
       getDistinctId()
     ]).then(function (results) {
       var config = results[0];
-      var optedOut = results[1][ANALYTICS_ENABLED_KEY] === false;
-      var distinctId = results[2];
-      if (!config || optedOut) return;
+      var distinctId = results[1];
+      if (!config) return;
       var version = chrome.runtime.getManifest().version;
       return Promise.all(events.map(function (e) {
         var payload = Core.buildCapturePayload({

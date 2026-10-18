@@ -27,7 +27,7 @@ cp config.example.json config.json   # gitignored
 # then set "posthogApiKey" to the PostHog *project* key (phc_...), never a personal API key
 ```
 
-If `config.json` is missing, its key is empty, or the host isn't `https`, analytics stays off. Users can switch it off in the popup ("Share anonymous usage"). URLs, page titles and page content are never sent. See `docs/analytics/README.md` for the event list.
+If `config.json` is missing, its key is empty, or the host isn't `https`, analytics stays off. Only usage events are sent (on/off, size, popup opens, installs). URLs, page titles and page content are never sent. See `docs/analytics/README.md` for the event list.
 
 ## Tests
 

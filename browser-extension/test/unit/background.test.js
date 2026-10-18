@@ -245,14 +245,11 @@ test('browser startup while disabled only sends app_opened', async () => {
   assert.deepEqual(h.events(), ['app_opened']);
 });
 
-test('opting out stops all sends', async () => {
+test('a stale analyticsEnabled:false flag no longer blocks sends (no opt-out)', async () => {
   const h = createHarness({ storage: { analyticsEnabled: false } });
   await h.install('install');
-  await h.setSettings({ enabled: true });
-  await h.startup();
-  h.message({ type: 'popup_opened' }, { id: EXT_ID });
   await h.idle();
-  assert.deepEqual(h.captures, []);
+  assert.deepEqual(h.events(), ['app_opened']);
 });
 
 test('missing config means zero network calls and no errors', async () => {

@@ -18,7 +18,7 @@ test('fresh install shows default controls', async ({ context, extensionId }) =>
   await expect(popup.locator('#opacity-value')).toHaveText('70%');
   await expect(popup.getByRole('slider', { name: 'Blur' })).toHaveValue('0');
   await expect(popup.locator('#blur-value')).toHaveText('0px');
-  await expect(popup.getByRole('checkbox', { name: 'Share anonymous usage' })).toBeChecked();
+  await expect(popup.getByRole('checkbox')).toHaveCount(0); // no analytics toggle
 });
 
 test('toggling the switch turns the overlay on in an open tab', async ({ context, extensionId, page }) => {
@@ -64,10 +64,32 @@ test('reopening the popup reflects saved values', async ({ context, extensionId 
   await expect(popup.getByRole('switch', { name: 'Focus overlay' })).toBeChecked();
 });
 
-test('analytics opt-out is stored', async ({ context, extensionId }) => {
+test('preview mirrors size, color and on/off', async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  await popup.getByRole('checkbox', { name: 'Share anonymous usage' }).uncheck();
-  await expect.poll(async () => (await getStorage(context, 'analyticsEnabled')).analyticsEnabled).toBe(false);
+  const band = () => popup.evaluate(() => {
+    const top = document.querySelector('.dim-top').getBoundingClientRect();
+    const bottom = document.querySelector('.dim-bottom').getBoundingClientRect();
+    return Math.round(bottom.top - top.bottom);
+  });
+  await expect.poll(band).toBe(38); // M: 300px * 0.125, rounded
+  await expect(popup.locator('.panel')).not.toHaveClass(/is-on/);
+  await popup.getByRole('button', { name: 'Large' }).click();
+  await expect.poll(band).toBe(56); // L: 450px * 0.125, rounded
+  await expect(popup.locator('.panel')).toHaveClass(/is-on/);
+  await popup.getByRole('button', { name: 'Light' }).click();
+  await expect.poll(() => popup.evaluate(() => getComputedStyle(document.querySelector('.dim-top')).backgroundColor))
+    .toBe('rgba(255, 255, 255, 0.7)');
+});
+
+test('hovering the preview moves its band', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  const box = await popup.locator('#preview').boundingBox();
+  await popup.mouse.move(box.x + 40, box.y + 30);
+  await expect.poll(() => popup.evaluate(() => {
+    const p = document.getElementById('preview').getBoundingClientRect();
+    const t = document.querySelector('.dim-top').getBoundingClientRect();
+    return Math.round(t.bottom - p.top);
+  })).toBe(Math.round(30 - 37.5 / 2));
 });
 
 test('arrow keys move through segmented controls', async ({ context, extensionId }) => {

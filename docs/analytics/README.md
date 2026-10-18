@@ -79,7 +79,7 @@ To split any insight by platform: **Breakdown → Event property → `platform`*
 | `mode_activated` | `mode` (`rectangle`), `size` | Turned on, or size changed |
 | `mode_deactivated` | `mode`, `size`, `duration_seconds` | Turned off, or size changed |
 
-Extension durations are measured per browser session: a browser restart starts a new view. Users can opt out in the popup. No URLs or page content are sent.
+Extension durations are measured per browser session: a browser restart starts a new view. Only usage events are sent; no URLs or page content.
 
 ## Testing
 

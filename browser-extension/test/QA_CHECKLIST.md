@@ -26,10 +26,10 @@ Run this in **real Google Chrome** with the unpacked extension loaded (see `../R
 - [ ] Fullscreen a video: note that the overlay isn't drawn over browser fullscreen.
 - [ ] Print preview (Cmd+P): no overlay in the preview.
 - [ ] Click **reload** on the extension card in `chrome://extensions` with Pace on and tabs open: each tab ends with exactly one working overlay (or none until the next mouse move, then one). Turning Pace off afterwards removes it everywhere.
+- [ ] The popup preview reflects size, color, opacity and blur, and hovering it moves the band.
 - [ ] Zoom the popup to 200% (Cmd+plus while it's open): it's still usable.
 - [ ] Keyboard only in the popup: Tab through every control; arrow keys change Size and Color; focus rings are visible.
 
 ## Analytics (needs a real PostHog project key in `config.json`)
 - [ ] Toggle Pace on and off and change size. Within about a minute, PostHog shows `pace_view_shown`, `mode_activated`, `pace_view_hidden` and `mode_deactivated` with `platform = chrome_extension`.
 - [ ] The service worker console (`chrome://extensions` → Pace → "service worker") shows **no CORS errors**.
-- [ ] Turn off **Share anonymous usage**: no further events arrive.
