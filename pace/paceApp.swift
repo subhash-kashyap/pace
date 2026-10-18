@@ -168,7 +168,6 @@ class AppDelegate: NSObject, NSApplicationDelegate, ObservableObject {
     private var toggleMenuItem: NSMenuItem?
     private var focusModeMenuItems: [FocusMode: NSMenuItem] = [:]
     private var focusSizeMenuItems: [FocusSize: NSMenuItem] = [:]
-    private 
 
     // Analytics tracking
     private var overlayShownTime: Date?
