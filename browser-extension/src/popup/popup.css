@@ -1,0 +1,134 @@
+:root {
+  --bg: #121214;
+  --surface: #1c1c20;
+  --surface-hover: #26262b;
+  --border: rgba(255, 255, 255, 0.08);
+  --text: #f2f2f4;
+  --muted: rgba(242, 242, 244, 0.6);
+  --accent: #e8e8ec;
+  --accent-text: #121214;
+  --focus: #8ab4ff;
+  color-scheme: dark;
+}
+
+* { box-sizing: border-box; }
+
+html, body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font: 13px/1.4 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+}
+
+.panel {
+  width: 280px;
+  padding: 14px 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.brand { display: flex; align-items: center; gap: 8px; }
+.brand img { border-radius: 5px; }
+h1 { margin: 0; font-size: 15px; font-weight: 600; letter-spacing: 0.01em; }
+
+h2, .slider-head label {
+  margin: 0;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+
+.row { display: flex; align-items: center; justify-content: space-between; gap: 12px; }
+.slider-row { flex-direction: column; align-items: stretch; gap: 6px; }
+.slider-head { display: flex; justify-content: space-between; align-items: baseline; }
+output { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 12px; }
+
+.notice {
+  margin: -4px 0 0;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(255, 196, 0, 0.1);
+  color: #ffd666;
+  font-size: 12px;
+}
+
+/* Segmented controls */
+.segmented {
+  display: inline-flex;
+  padding: 2px;
+  border-radius: 8px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+}
+
+.segmented button {
+  min-width: 44px;
+  min-height: 28px;
+  padding: 0 10px;
+  border: 0;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--muted);
+  font: inherit;
+  font-weight: 500;
+  cursor: pointer;
+}
+
+.segmented button:hover { color: var(--text); background: var(--surface-hover); }
+.segmented button[aria-pressed="true"] { background: var(--accent); color: var(--accent-text); }
+
+/* Switch */
+.switch { position: relative; display: inline-flex; cursor: pointer; }
+.switch input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
+.track {
+  width: 38px; height: 22px; border-radius: 11px;
+  background: var(--surface-hover);
+  border: 1px solid var(--border);
+  transition: background 150ms ease-out;
+  display: inline-flex; align-items: center; padding: 2px;
+}
+.thumb {
+  width: 16px; height: 16px; border-radius: 50%;
+  background: var(--muted);
+  transition: transform 150ms ease-out, background 150ms ease-out;
+}
+.switch input:checked + .track { background: var(--accent); }
+.switch input:checked + .track .thumb { transform: translateX(16px); background: var(--accent-text); }
+
+/* Range */
+input[type="range"] {
+  width: 100%;
+  margin: 0;
+  accent-color: var(--accent);
+  height: 20px;
+  cursor: pointer;
+}
+
+.footer {
+  border-top: 1px solid var(--border);
+  padding-top: 10px;
+}
+
+.check { display: inline-flex; align-items: center; gap: 8px; color: var(--muted); font-size: 12px; cursor: pointer; }
+.check input { accent-color: var(--accent); margin: 0; }
+
+:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.switch input:focus-visible + .track { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+.sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0, 0, 0, 0); white-space: nowrap; border: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .track, .thumb { transition: none; }
+}

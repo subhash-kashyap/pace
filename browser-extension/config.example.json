@@ -1,0 +1,4 @@
+{
+  "posthogApiKey": "phc_your_project_api_key",
+  "posthogHost": "https://us.i.posthog.com"
+}

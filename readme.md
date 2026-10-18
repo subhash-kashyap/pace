@@ -18,6 +18,10 @@ B. Overlay window to help with focus.
 - **Flash Mode**: 25-minute Pomodoro timer with visual alerts
 - **Auto-Updates**: Built-in update checker powered by Sparkle
 
+## Pace for Chrome
+
+A lightweight Chrome extension with the Rectangle focus mode (S/M/L, dark/light, opacity, blur) lives in [`browser-extension/`](browser-extension/README.md). Load it unpacked from `chrome://extensions`.
+
 ## Installation
 
 ```bash

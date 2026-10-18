@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Pace</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <main class="panel">
+    <header class="header">
+      <div class="brand">
+        <img src="../../icons/icon32.png" alt="" width="20" height="20">
+        <h1>Pace</h1>
+      </div>
+      <label class="switch" for="enabled">
+        <span class="sr-only">Focus overlay</span>
+        <input id="enabled" type="checkbox" role="switch" aria-label="Focus overlay">
+        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+      </label>
+    </header>
+
+    <p id="notice" class="notice" role="status" hidden></p>
+
+    <section class="row">
+      <h2 id="size-label">Size</h2>
+      <div class="segmented" role="group" aria-labelledby="size-label" data-setting="size">
+        <button type="button" data-value="S" aria-pressed="false" aria-label="Small">S</button>
+        <button type="button" data-value="M" aria-pressed="false" aria-label="Medium">M</button>
+        <button type="button" data-value="L" aria-pressed="false" aria-label="Large">L</button>
+      </div>
+    </section>
+
+    <section class="row">
+      <h2 id="color-label">Color</h2>
+      <div class="segmented" role="group" aria-labelledby="color-label" data-setting="isDarkMode">
+        <button type="button" data-value="true" aria-pressed="false">Dark</button>
+        <button type="button" data-value="false" aria-pressed="false">Light</button>
+      </div>
+    </section>
+
+    <section class="row slider-row">
+      <div class="slider-head">
+        <label for="opacity">Opacity</label>
+        <output id="opacity-value" for="opacity">70%</output>
+      </div>
+      <input id="opacity" type="range" min="10" max="100" step="1" value="70">
+    </section>
+
+    <section class="row slider-row">
+      <div class="slider-head">
+        <label for="blur">Blur</label>
+        <output id="blur-value" for="blur">0px</output>
+      </div>
+      <input id="blur" type="range" min="0" max="20" step="1" value="0">
+    </section>
+
+    <footer class="footer">
+      <label class="check" for="analytics">
+        <input id="analytics" type="checkbox" checked>
+        <span>Share anonymous usage</span>
+      </label>
+    </footer>
+  </main>
+  <script src="../core.js"></script>
+  <script src="popup.js"></script>
+</body>
+</html>

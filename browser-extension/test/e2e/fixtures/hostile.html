@@ -1,0 +1,19 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Hostile CSS fixture</title>
+  <style>
+    * { all: unset; }
+    html, body { display: block; }
+    body { transform: translateX(37px) scale(0.9); overflow: hidden; height: 300vh; }
+    div, span, section { display: none !important; position: static !important; z-index: -1 !important; }
+    pace-focus-overlay { display: none; opacity: 0; }
+    .cover { display: block !important; position: fixed !important; inset: 0; z-index: 2147483646 !important; background: transparent; }
+  </style>
+</head>
+<body>
+  <p class="cover">Hostile page with aggressive styles</p>
+  <div>Hidden div</div>
+</body>
+</html>
