@@ -35,7 +35,10 @@ class AnalyticsManager {
         #endif
         
         PostHogSDK.shared.setup(config)
-        
+
+        // Tag every event with the platform so Mac and Chrome extension usage can be split in dashboards
+        PostHogSDK.shared.register(["platform": "macos"])
+
         // Identify the user with a persistent anonymous ID
         let userId = getOrCreateUserId()
         PostHogSDK.shared.identify(userId)

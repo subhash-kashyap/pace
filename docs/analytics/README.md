@@ -57,6 +57,30 @@ Done! Analytics are now tracking.
 | `flash_mode_toggled` | `is_active` | Flash on/off |
 | `flash_triggered` | - | Flash played |
 
+## Platforms
+
+Both the Mac app and the Chrome extension (`browser-extension/`) send to the same PostHog project. Every event has a `platform` property:
+
+| `platform` | Source |
+|---|---|
+| `macos` | Mac app (registered as a super property in `AnalyticsManager.configure()`) |
+| `chrome_extension` | Chrome extension (also carries `browser: "chrome"` and `extension_version`) |
+
+To split any insight by platform: **Breakdown → Event property → `platform`**. Mac events sent before this property existed can be identified by `$lib = posthog-ios`.
+
+### Chrome extension events
+
+| Event | Properties | When |
+|-------|-----------|------|
+| `app_opened` | `is_new_user` | Install (`true`) or browser start (`false`) |
+| `popup_opened` | - | Popup opened |
+| `pace_view_shown` | - | Overlay turned on, or browser started with it on |
+| `pace_view_hidden` | `view_duration_seconds` | Overlay turned off |
+| `mode_activated` | `mode` (`rectangle`), `size` | Turned on, or size changed |
+| `mode_deactivated` | `mode`, `size`, `duration_seconds` | Turned off, or size changed |
+
+Extension durations are measured per browser session: a browser restart starts a new view. Users can opt out in the popup. No URLs or page content are sent.
+
 ## Testing
 
 1. Run the app
