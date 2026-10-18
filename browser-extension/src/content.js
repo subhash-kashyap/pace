@@ -15,7 +15,7 @@
   var pendingY = null;
   var rafId = 0;
   var dead = false;
-  var seenChange = false;
+  var changeCount = 0; // bumped per settings change so a slower storage read can't overwrite a newer render
   // Captured once: an orphaned instance keeps its own (now invalid) runtime even if the world is reused.
   var runtime = null;
   try { runtime = chrome.runtime; } catch (e) { /* no extension context */ }
@@ -56,8 +56,11 @@
     }
   }
 
-  // Chrome's PDF viewer swallows mouse events, so a band there could never move.
+  // Only HTML documents can host the overlay (not SVG/XML), and Chrome's PDF viewer swallows
+  // mouse events, so a band there could never move.
   function unsupportedDocument() {
+    var root = document.documentElement;
+    if (!root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml') return true;
     return document.contentType === 'application/pdf';
   }
 
@@ -115,23 +118,29 @@
 
   function refresh() {
     if (!contextAlive()) return teardown();
-    chrome.storage.local.get(Core.SETTINGS_KEY).then(function (r) { render(r[Core.SETTINGS_KEY]); }, function () {});
+    var seen = changeCount;
+    chrome.storage.local.get(Core.SETTINGS_KEY).then(function (r) {
+      if (changeCount === seen) render(r[Core.SETTINGS_KEY]);
+    }, function () {});
   }
 
   // bfcache restores can miss storage events while frozen; re-read settings.
   function onPageShow(event) {
+    if (!contextAlive()) return teardown();
+    ensureAttached();
     if (event.persisted) refresh();
   }
 
   function onVisibilityChange() {
-    if (document.visibilityState === 'visible' && !contextAlive()) teardown();
+    if (document.visibilityState !== 'visible') return;
+    if (!contextAlive()) return teardown();
+    ensureAttached();
   }
 
   function mount() {
     if (host && host.isConnected) return;
+    if (unsupportedDocument()) return;
     var root = document.documentElement;
-    // Only HTML documents (not SVG/XML or the PDF viewer) can host the overlay.
-    if (!root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml' || unsupportedDocument()) return;
     // Replace any host left behind by an orphaned script (extension update/reload).
     removeAllHosts();
 
@@ -161,8 +170,8 @@
     window.removeEventListener('resize', onResize);
     if (rafId) cancelAnimationFrame(rafId);
     rafId = 0;
+    // Only our own host: an orphan tearing down must not remove a re-injected live instance's overlay.
     if (host) host.remove();
-    removeAllHosts(); // also clears a stale host from an orphaned instance
     host = null;
     panels = null;
   }
@@ -188,13 +197,14 @@
       }
     } else {
       unmount();
+      removeAllHosts(); // also clears a stale host from an orphaned instance
     }
   }
 
   function onStorageChanged(changes, area) {
     if (area !== 'local' || !changes[Core.SETTINGS_KEY]) return;
     if (!contextAlive()) return teardown();
-    seenChange = true;
+    changeCount++;
     render(changes[Core.SETTINGS_KEY].newValue);
   }
 
@@ -212,10 +222,11 @@
     chrome.runtime.onMessage.addListener(onMessage);
     window.addEventListener('pageshow', onPageShow);
     document.addEventListener('visibilitychange', onVisibilityChange);
+    var seen = changeCount;
     chrome.storage.local.get(Core.SETTINGS_KEY).then(function (result) {
-      if (!seenChange) render(result[Core.SETTINGS_KEY]);
+      if (changeCount === seen) render(result[Core.SETTINGS_KEY]);
     }, function () {
-      if (!seenChange) render(null);
+      if (changeCount === seen) render(null);
     });
   } catch (e) {
     teardown();

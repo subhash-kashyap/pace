@@ -8,11 +8,22 @@ const vm = require('node:vm');
 const SRC = path.resolve(__dirname, '..', '..', 'src');
 const EXT_ID = 'testextensionid';
 
-function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'https://ph.test' }, storage = {}, tabs = [], captureFails = false } = {}) {
+function createHarness({
+  config = { posthogApiKey: 'phc_test', posthogHost: 'https://ph.test' },
+  storage = {},
+  tabs = [],
+  captureFails = false,
+  captureHangs = () => false, // (body) => true makes that capture fetch never settle until aborted
+  fileAccess = false, // value chrome.extension.isAllowedFileSchemeAccess() resolves to; undefined removes chrome.extension
+  getFails = () => false, // (keys) => true makes storage.local.get reject
+  setFails = () => false // (items) => true makes storage.local.set reject
+} = {}) {
   const store = structuredClone(storage);
   const listeners = { installed: [], startup: [], changed: [], message: [] };
   const captures = [];
   const injected = [];
+  const getCalls = [];
+  const signals = [];
   let clock = 1_000_000;
 
   function emitChanged(changes) {
@@ -31,6 +42,8 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
     storage: {
       local: {
         async get(keys) {
+          getCalls.push(keys);
+          if (getFails(keys)) throw new Error('storage get failed');
           if (keys == null) return structuredClone(store);
           const list = Array.isArray(keys) ? keys : [keys];
           const out = {};
@@ -38,6 +51,7 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
           return out;
         },
         async set(items) {
+          if (setFails(items)) throw new Error('storage set failed');
           const changes = {};
           for (const [k, v] of Object.entries(items)) {
             changes[k] = { oldValue: store[k], newValue: structuredClone(v) };
@@ -48,6 +62,7 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
       },
       onChanged: { addListener: (fn) => listeners.changed.push(fn) }
     },
+    extension: { isAllowedFileSchemeAccess: async () => fileAccess },
     tabs: { query: async () => tabs },
     scripting: {
       async executeScript({ target, files }) {
@@ -64,10 +79,26 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
       if (!config) throw new TypeError('Failed to fetch');
       return { ok: true, json: async () => config };
     }
-    captures.push({ url, body: JSON.parse(init.body) });
+    const body = JSON.parse(init.body);
+    captures.push({ url, body, init });
     if (captureFails) throw new TypeError('network down');
+    if (captureHangs(body)) {
+      return new Promise((_, reject) => {
+        if (init.signal) init.signal.addEventListener('abort', () => reject(new DOMException('aborted', 'AbortError')));
+      });
+    }
     return { ok: true, status: 200 };
   }
+  if (fileAccess === undefined) delete chrome.extension;
+
+  // AbortSignal.timeout stub: records the requested timeout and lets tests abort manually.
+  const FakeAbortSignal = {
+    timeout(ms) {
+      const controller = new AbortController();
+      signals.push({ ms, controller });
+      return controller.signal;
+    }
+  };
 
   const sandbox = {
     chrome,
@@ -77,6 +108,8 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
     crypto: globalThis.crypto,
     Date: class extends Date { static now() { return clock; } },
     Promise,
+    Set,
+    AbortSignal: FakeAbortSignal,
     setTimeout
   };
   sandbox.globalThis = sandbox;
@@ -92,6 +125,10 @@ function createHarness({ config = { posthogApiKey: 'phc_test', posthogHost: 'htt
     store,
     captures,
     injected,
+    getCalls,
+    signals,
+    abortAll: () => signals.forEach((s) => s.controller.abort()),
+    queueIdle: async () => { for (let i = 0; i < 5; i++) await bg.idleQueue(); },
     events: () => captures.map((c) => c.body.event),
     advance: (ms) => { clock += ms; },
     now: () => clock,
@@ -262,4 +299,106 @@ test('rapid toggles are processed in order', async () => {
   h.setSettings({ enabled: true });
   await h.idle();
   assert.deepEqual(h.events(), ['pace_view_shown', 'mode_activated', 'pace_view_hidden', 'mode_deactivated', 'pace_view_shown', 'mode_activated']);
+});
+
+async function waitFor(fn, ms = 1000) {
+  const end = Date.now() + ms;
+  while (!fn()) {
+    if (Date.now() > end) throw new Error('waitFor timed out');
+    await new Promise((r) => setTimeout(r, 5));
+  }
+}
+
+test('a stalled capture fetch does not block later settings changes', async () => {
+  const h = createHarness({
+    storage: { paceSettings: { enabled: false } },
+    captureHangs: (body) => body.event === 'pace_view_shown'
+  });
+  await h.setSettings({ enabled: true });
+  await h.queueIdle();
+  h.advance(30_000);
+  await h.setSettings({ size: 'L' });
+  await h.queueIdle();
+  // Timestamp bookkeeping for the size change ran even though the first fetch never settled.
+  assert.equal(h.store.paceAnalyticsTimestamps.modeShownAt, h.now());
+  await waitFor(() => h.events().length >= 4);
+  assert.deepEqual(h.events().slice(2), ['mode_deactivated', 'mode_activated']);
+  assert.equal(h.captures[3].body.properties.size, 'L');
+  h.abortAll();
+  await h.idle();
+});
+
+test('capture fetch carries a 5s AbortSignal', async () => {
+  const h = createHarness();
+  h.message({ type: 'popup_opened' }, { id: EXT_ID });
+  await h.idle();
+  assert.equal(h.captures.length, 1);
+  assert.ok(h.captures[0].init.signal instanceof AbortSignal, 'signal present in fetch init');
+  assert.deepEqual(h.signals.map((s) => s.ms), [5000]);
+});
+
+test('display-only changes skip the timestamp read; enable/size changes still emit', async () => {
+  const h = createHarness({ storage: { paceSettings: { enabled: true } } });
+  const timestampReads = () => h.getCalls.filter((k) => k === 'paceAnalyticsTimestamps').length;
+  await h.setSettings({ opacity: 0.3 });
+  await h.setSettings({ blurRadius: 9 });
+  await h.setSettings({ isDarkMode: false });
+  await h.idle();
+  assert.equal(timestampReads(), 0);
+  assert.deepEqual(h.events(), []);
+  await h.setSettings({ size: 'S' });
+  await h.idle();
+  assert.equal(timestampReads(), 1);
+  assert.deepEqual(h.events(), ['mode_deactivated', 'mode_activated']);
+  await h.setSettings({ enabled: false });
+  await h.idle();
+  assert.equal(timestampReads(), 2);
+  assert.deepEqual(h.events().slice(2), ['pace_view_hidden', 'mode_deactivated']);
+});
+
+test('first enable with no previous settings (oldValue undefined) still emits', async () => {
+  const h = createHarness();
+  await h.setSettings({ enabled: true });
+  await h.idle();
+  assert.deepEqual(h.events(), ['pace_view_shown', 'mode_activated']);
+});
+
+test('file:// tabs are re-injected only when file access is allowed', async () => {
+  const tabs = [{ id: 1, url: 'https://a.test/' }, { id: 2, url: 'file:///Users/me/doc.html' }];
+  const allowed = createHarness({ tabs, fileAccess: true });
+  await allowed.install('update');
+  await allowed.idle();
+  assert.deepEqual(allowed.injected.map((i) => i.tabId), [1, 2]);
+
+  const denied = createHarness({ tabs, fileAccess: false });
+  await denied.install('update');
+  await denied.idle();
+  assert.deepEqual(denied.injected.map((i) => i.tabId), [1]);
+
+  const noApi = createHarness({ tabs, fileAccess: undefined });
+  await noApi.install('update');
+  await noApi.idle();
+  assert.deepEqual(noApi.injected.map((i) => i.tabId), [1]);
+});
+
+test('install still re-injects when the distinct id cannot be stored', async () => {
+  const h = createHarness({
+    tabs: [{ id: 1, url: 'https://a.test/' }],
+    setFails: (items) => 'paceAnalyticsId' in items
+  });
+  await h.install('install');
+  await h.idle();
+  assert.deepEqual(h.injected.map((i) => i.tabId), [1]);
+  assert.ok(h.store.paceSettings, 'defaults still written');
+});
+
+test('install still re-injects and sends app_opened when the settings read fails', async () => {
+  const h = createHarness({
+    tabs: [{ id: 1, url: 'https://a.test/' }],
+    getFails: (keys) => keys === 'paceSettings'
+  });
+  await h.install('install');
+  await h.idle();
+  assert.deepEqual(h.injected.map((i) => i.tabId), [1]);
+  assert.deepEqual(h.events(), ['app_opened']);
 });

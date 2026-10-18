@@ -122,3 +122,32 @@ test('a change made before stored settings load keeps the other saved values', a
   await popup.getByRole('button', { name: 'Large' }).click();
   await expect.poll(() => settings(context)).toEqual({ enabled: true, size: 'L', opacity: 0.35, blurRadius: 6, isDarkMode: false });
 });
+
+test('a failed initial settings read still lets changes save', async ({ context, extensionId }) => {
+  await expect.poll(() => settings(context)).toBeTruthy();
+  const popup = await context.newPage();
+  await popup.addInitScript(() => {
+    const area = chrome.storage.local;
+    const get = area.get.bind(area);
+    let failed = false;
+    area.get = (...args) => (failed ? get(...args) : (failed = true, Promise.reject(new Error('boom'))));
+  });
+  await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
+  await expect.poll(() => popup.evaluate(() => chrome.storage.local.get.toString().includes('boom'))).toBe(true);
+  await popup.getByRole('button', { name: 'Small' }).click();
+  await expect.poll(async () => (await settings(context)).size).toBe('S');
+});
+
+test('a failed write resyncs the controls with stored settings', async ({ context, extensionId }) => {
+  const popup = await openPopup(context, extensionId);
+  await expect(popup.getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'true');
+  await popup.evaluate(() => {
+    const area = chrome.storage.local;
+    const set = area.set.bind(area);
+    let failed = false;
+    area.set = (...args) => (failed ? set(...args) : (failed = true, Promise.reject(new Error('quota'))));
+  });
+  await popup.getByRole('button', { name: 'Large' }).click();
+  await expect(popup.getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'true');
+  expect((await settings(context)).size).toBe('M');
+});

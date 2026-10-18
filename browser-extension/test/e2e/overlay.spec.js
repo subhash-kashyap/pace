@@ -1,5 +1,5 @@
 const {
-  test, expect, FIXTURE_ORIGIN, setSettings, setRawStorage, overlayState, settledOverlay, launchWithExtension
+  test, expect, FIXTURE_ORIGIN, getWorker, setSettings, setRawStorage, overlayState, settledOverlay, launchWithExtension
 } = require('../helpers/fixtures');
 const fs = require('node:fs');
 
@@ -251,4 +251,26 @@ test('does not mount over PDFs (the viewer swallows mouse events)', async ({ con
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
   await page.waitForTimeout(1500);
   expect((await overlayState(page)).count).toBe(0);
+});
+
+test('does not mount on SVG documents and the ping reports them unsupported', async ({ context, page }) => {
+  await setSettings(context, { enabled: true });
+  await page.goto(`${FIXTURE_ORIGIN}/drawing.svg`);
+  const reply = async () => (await getWorker(context)).evaluate(async (url) => {
+    const tab = (await chrome.tabs.query({})).find((t) => t.url === url);
+    return chrome.tabs.sendMessage(tab.id, { type: 'pace_ping' }).catch(() => null);
+  }, `${FIXTURE_ORIGIN}/drawing.svg`);
+  await expect.poll(reply).toMatchObject({ mounted: false, enabled: true, unsupported: true });
+  expect((await overlayState(page)).count).toBe(0);
+});
+
+test('overlay re-attaches on visibilitychange and pageshow without a mouse move', async ({ context, page }) => {
+  await enabledPage(context, page);
+  await page.evaluate(() => document.querySelector('pace-focus-overlay').remove());
+  expect((await overlayState(page)).count).toBe(0);
+  await page.evaluate(() => document.dispatchEvent(new Event('visibilitychange')));
+  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
+  await page.evaluate(() => document.querySelector('pace-focus-overlay').remove());
+  await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false })));
+  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
 });

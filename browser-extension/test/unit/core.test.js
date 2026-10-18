@@ -42,17 +42,11 @@ test('bandHeight follows macOS multipliers on a 200px base', () => {
 });
 
 test('panelOffsets centers the band on y', () => {
-  const o = Core.panelOffsets(400, 300);
-  assert.equal(o.bandTop, 250);
-  assert.equal(o.bandBottom, 550);
-  assert.equal(o.topTranslate, 250, 'top panel (anchored above viewport) bottom edge at 250');
-  assert.equal(o.bottomTranslate, 550, 'bottom panel top edge at 550');
+  assert.deepEqual(Core.panelOffsets(400, 300), { topTranslate: 250, bottomTranslate: 550 });
 });
 
 test('panelOffsets does not clamp at the viewport edges', () => {
-  const atTop = Core.panelOffsets(0, 300);
-  assert.equal(atTop.topTranslate, -150, 'top panel bottom edge at -150');
-  assert.equal(atTop.bottomTranslate, 150);
+  assert.deepEqual(Core.panelOffsets(0, 300), { topTranslate: -150, bottomTranslate: 150 });
   assert.equal(Core.panelOffsets(1000, 300).bottomTranslate, 1150);
 });
 
@@ -85,12 +79,6 @@ test('isRestrictedUrl treats file:// as restricted unless file access is allowed
   assert.equal(Core.isRestrictedUrl('file:///Users/me/a.html'), true);
   assert.equal(Core.isRestrictedUrl('file:///Users/me/a.html', false), true);
   assert.equal(Core.isRestrictedUrl('file:///Users/me/a.html', true), false);
-});
-
-test('nextSize cycles S -> M -> L -> S', () => {
-  assert.equal(Core.nextSize('S'), 'M');
-  assert.equal(Core.nextSize('M'), 'L');
-  assert.equal(Core.nextSize('L'), 'S');
 });
 
 const on = (size = 'M') => ({ ...DEFAULTS, enabled: true, size });

@@ -43,7 +43,13 @@
     if (!loaded) return Promise.resolve();
     var update = {};
     update[KEY] = settings;
-    return chrome.storage.local.set(update);
+    // A failed write would leave the controls showing values that were never saved; resync from storage.
+    return chrome.storage.local.set(update).catch(function () {
+      return chrome.storage.local.get(KEY).then(function (r) {
+        settings = Core.normalizeSettings(r[KEY]);
+        render();
+      });
+    }).catch(function () {});
   }
 
   // Sliders write at most once per animation frame for a smooth live preview.
@@ -154,14 +160,17 @@
     return Core.isRestrictedUrl(url, fileAccess) ? cantShow() : 'Reload this tab to use Pace here.';
   }
 
-  chrome.storage.local.get([KEY, ANALYTICS_ENABLED_KEY]).then(function (r) {
+  function onLoaded(r) {
     settings = Core.normalizeSettings(Object.assign({}, r[KEY], earlyPatch));
     els.analytics.checked = r[ANALYTICS_ENABLED_KEY] !== false;
     loaded = true;
     render();
     if (earlyPatch) write();
     earlyPatch = null;
-  });
+  }
+
+  // If the read fails, fall back to defaults so the controls still save instead of silently dropping writes.
+  chrome.storage.local.get([KEY, ANALYTICS_ENABLED_KEY]).then(onLoaded, function () { onLoaded({}); });
 
   render();
   checkActiveTab();

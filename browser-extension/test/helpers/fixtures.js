@@ -13,6 +13,8 @@ const MINIMAL_PDF = Buffer.from(
   '3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 300 300]>>endobj\ntrailer<</Root 1 0 R>>\n%%EOF'
 );
 
+const CONTENT_TYPES = { '.svg': 'image/svg+xml' };
+
 async function routeFixtures(context) {
   await context.route(`${FIXTURE_ORIGIN}/**`, async (route) => {
     const { pathname } = new URL(route.request().url());
@@ -21,7 +23,8 @@ async function routeFixtures(context) {
     }
     const file = path.join(FIXTURE_DIR, path.basename(pathname) || 'article.html');
     if (!fs.existsSync(file)) return route.fulfill({ status: 404, body: 'not found' });
-    return route.fulfill({ status: 200, contentType: 'text/html; charset=utf-8', body: fs.readFileSync(file) });
+    const contentType = CONTENT_TYPES[path.extname(file)] || 'text/html; charset=utf-8';
+    return route.fulfill({ status: 200, contentType, body: fs.readFileSync(file) });
   });
 }
 

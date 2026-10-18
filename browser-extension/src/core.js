@@ -8,7 +8,6 @@
 
   // Mirrors FocusSize multipliers in pace/FocusShape.swift
   var SIZES = { S: 1.0, M: 1.5, L: 2.25 };
-  var SIZE_ORDER = ['S', 'M', 'L'];
 
   var OPACITY_MIN = 0.1;
   var OPACITY_MAX = 1.0;
@@ -61,14 +60,7 @@
   // depends on viewport height: top panel's bottom edge lands at y - h/2, bottom panel's top edge at y + h/2.
   // Like the macOS RectangleShape, the band is not clamped to the viewport.
   function panelOffsets(y, h) {
-    var bandTop = y - h / 2;
-    var bandBottom = y + h / 2;
-    return {
-      bandTop: bandTop,
-      bandBottom: bandBottom,
-      topTranslate: bandTop,
-      bottomTranslate: bandBottom
-    };
+    return { topTranslate: y - h / 2, bottomTranslate: y + h / 2 };
   }
 
   function dimColor(isDarkMode, opacity) {
@@ -104,11 +96,6 @@
       if (parsed.hostname === rule.host && parsed.pathname.indexOf(rule.path) === 0) return true;
     }
     return false;
-  }
-
-  function nextSize(size) {
-    var i = SIZE_ORDER.indexOf(size);
-    return SIZE_ORDER[(i + 1) % SIZE_ORDER.length];
   }
 
   // ---- Analytics ----
@@ -197,14 +184,7 @@
 
   var PaceCore = {
     SETTINGS_KEY: SETTINGS_KEY,
-    BASE_BAND_HEIGHT: BASE_BAND_HEIGHT,
-    SIZES: SIZES,
-    SIZE_ORDER: SIZE_ORDER,
     DEFAULTS: DEFAULTS,
-    OPACITY_MIN: OPACITY_MIN,
-    OPACITY_MAX: OPACITY_MAX,
-    BLUR_MIN: BLUR_MIN,
-    BLUR_MAX: BLUR_MAX,
     MODE: MODE,
     normalizeSettings: normalizeSettings,
     bandHeight: bandHeight,
@@ -212,7 +192,6 @@
     dimColor: dimColor,
     blurFilter: blurFilter,
     isRestrictedUrl: isRestrictedUrl,
-    nextSize: nextSize,
     analyticsEventsFor: analyticsEventsFor,
     buildCapturePayload: buildCapturePayload,
     validAnalyticsConfig: validAnalyticsConfig
