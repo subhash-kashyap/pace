@@ -8,13 +8,17 @@
 </head>
 <body>
   <main class="panel">
-    <header class="header">
-      <h1 class="wordmark">Pace</h1>
-      <label class="switch" for="enabled">
-        <input id="enabled" type="checkbox" role="switch" aria-label="Focus overlay">
-        <span class="track" aria-hidden="true"><span class="thumb"></span></span>
-      </label>
-    </header>
+    <h1 class="wordmark">Pace</h1>
+
+    <!-- The one control that matters most: big, labelled, iOS-style. The whole row toggles it. -->
+    <label class="power" for="enabled">
+      <span class="power-text">
+        <span id="power-title" class="power-title">Reading focus</span>
+        <span id="power-status" class="power-status">Off</span>
+      </span>
+      <input id="enabled" type="checkbox" role="switch" aria-labelledby="power-title" aria-describedby="power-status">
+      <span class="track" aria-hidden="true"><span class="thumb"></span></span>
+    </label>
 
     <!-- Miniature page showing the current overlay; hover to move the band. -->
     <div id="preview" class="preview" aria-hidden="true">
@@ -28,7 +32,10 @@
       <div class="dim dim-bottom"></div>
     </div>
 
-    <p id="notice" class="notice" role="status" hidden></p>
+    <div id="notice" class="notice" role="status" hidden>
+      <span id="notice-text"></span>
+      <button id="notice-action" type="button" class="notice-action" hidden></button>
+    </div>
 
     <div class="controls">
       <div class="row">

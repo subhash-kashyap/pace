@@ -246,11 +246,15 @@ test('turning Pace off also clears a leftover host from an orphaned instance', a
   await expect.poll(async () => (await overlayState(page)).count).toBe(0);
 });
 
-test('does not mount over PDFs (the viewer swallows mouse events)', async ({ context, page }) => {
-  await setSettings(context, { enabled: true });
+test('mounts over PDFs with the band at the viewport center', async ({ context, page }) => {
+  await setSettings(context, { enabled: true, size: 'M' });
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
-  await page.waitForTimeout(1500);
-  expect((await overlayState(page)).count).toBe(0);
+  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
+  const s = await settledOverlay(page, (s) => s.mounted);
+  expect(s.topBottomEdge).toBeCloseTo(s.viewportHeight / 2 - 150, 0);
+  expect(s.bottomTopEdge).toBeCloseTo(s.viewportHeight / 2 + 150, 0);
+  await setSettings(context, { enabled: false });
+  await expect.poll(async () => (await overlayState(page)).count).toBe(0);
 });
 
 test('does not mount on SVG documents and the ping reports them unsupported', async ({ context, page }) => {

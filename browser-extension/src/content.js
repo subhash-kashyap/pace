@@ -56,11 +56,15 @@
     }
   }
 
-  // Only HTML documents can host the overlay (not SVG/XML), and Chrome's PDF viewer swallows
-  // mouse events, so a band there could never move.
+  // Only HTML documents can host the overlay (not SVG/XML).
   function unsupportedDocument() {
     var root = document.documentElement;
-    if (!root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml') return true;
+    return !root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml';
+  }
+
+  // Chrome's PDF viewer swallows mouse events, so on PDFs the band stays at a fixed reading
+  // position (viewport center) and the text is scrolled through it.
+  function isPdf() {
     return document.contentType === 'application/pdf';
   }
 
@@ -210,7 +214,7 @@
 
   function onMessage(message, sender, sendResponse) {
     if (message && message.type === 'pace_ping') {
-      sendResponse({ mounted: !!(host && host.isConnected), enabled: settings.enabled, unsupported: unsupportedDocument() });
+      sendResponse({ mounted: !!(host && host.isConnected), enabled: settings.enabled, unsupported: unsupportedDocument(), pdf: isPdf() });
     }
   }
 

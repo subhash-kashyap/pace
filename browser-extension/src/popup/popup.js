@@ -14,7 +14,10 @@
 
   var els = {
     enabled: document.getElementById('enabled'),
+    status: document.getElementById('power-status'),
     notice: document.getElementById('notice'),
+    noticeText: document.getElementById('notice-text'),
+    noticeAction: document.getElementById('notice-action'),
     opacity: document.getElementById('opacity'),
     opacityValue: document.getElementById('opacity-value'),
     blur: document.getElementById('blur'),
@@ -26,6 +29,7 @@
 
   function render() {
     els.enabled.checked = settings.enabled;
+    els.status.textContent = settings.enabled ? 'On in every tab' : 'Off';
     var opacityPct = Math.round(settings.opacity * 100);
     els.opacity.value = String(opacityPct);
     els.opacityValue.textContent = opacityPct + '%';
@@ -35,6 +39,7 @@
     els.opacity.style.setProperty('--fill', ((opacityPct - 10) / 90) * 100 + '%');
     els.blur.style.setProperty('--fill', (settings.blurRadius / 20) * 100 + '%');
     renderPreview();
+    if (lastTab) renderNotice();
     els.groups.forEach(function (group) {
       var current = String(settings[group.dataset.setting]);
       group.querySelectorAll('button').forEach(function (btn) {
@@ -88,9 +93,12 @@
     patch = Object.assign({}, patch);
     if (!Object.prototype.hasOwnProperty.call(patch, 'enabled')) patch.enabled = true;
     if (!loaded) earlyPatch = Object.assign(earlyPatch || {}, patch);
+    var wasEnabled = settings.enabled;
     var next = Object.assign({}, settings, patch);
     settings = Core.normalizeSettings(next);
     render();
+    // Re-check the tab once the content script has reacted, so the notice reflects the new state.
+    if (settings.enabled !== wasEnabled) setTimeout(checkActiveTab, 400);
     return throttled ? scheduleWrite() : write();
   }
 
@@ -149,33 +157,82 @@
     });
   });
 
-  function showNotice(text) {
-    els.notice.textContent = text || '';
+  var noticeAction = null;
+
+  // kind: 'warn' (default) or 'hint'. action: { label, run } adds a button.
+  function showNotice(text, kind, action) {
+    els.noticeText.textContent = text || '';
     els.notice.hidden = !text;
+    els.notice.classList.toggle('is-hint', kind === 'hint');
+    noticeAction = text && action ? action.run : null;
+    els.noticeAction.hidden = !noticeAction;
+    els.noticeAction.textContent = noticeAction ? action.label : '';
+  }
+
+  els.noticeAction.addEventListener('click', function () {
+    if (noticeAction) noticeAction();
+  });
+
+  var lastTab = null;
+  var lastReply = null;
+
+  function ping(tabId) {
+    return chrome.tabs.sendMessage(tabId, { type: 'pace_ping' }).catch(function () { return null; });
+  }
+
+  // Tabs opened before install, or where injection raced, have no content script yet: add it now
+  // instead of asking for a reload.
+  function injectInto(tabId) {
+    return chrome.scripting.executeScript({ target: { tabId: tabId }, files: ['src/core.js', 'src/content.js'] })
+      .then(function () { return ping(tabId); }, function () { return null; });
   }
 
   function checkActiveTab() {
     return chrome.tabs.query({ active: true, currentWindow: true }).then(function (tabs) {
       var tab = tabs[0];
-      if (!tab || tab.id === undefined) return showNotice(cantShow());
+      lastTab = tab || null;
+      lastReply = null;
+      if (!tab || tab.id === undefined) return renderNotice();
       return Promise.resolve(chrome.extension.isAllowedFileSchemeAccess()).then(function (fileAccess) {
-        return chrome.tabs.sendMessage(tab.id, { type: 'pace_ping' }).then(function (reply) {
-          if (!reply) return showNotice(noReply(tab.url, fileAccess));
-          if (reply.unsupported) return showNotice(cantShow());
-          showNotice(reply.enabled && !reply.mounted ? "Pace isn't showing here. Try reloading this tab." : '');
-        }, function () {
-          showNotice(noReply(tab.url, fileAccess));
+        lastTab.fileAccess = fileAccess === true;
+        return ping(tab.id).then(function (reply) {
+          if (reply || Core.isRestrictedUrl(tab.url, lastTab.fileAccess)) return reply;
+          return injectInto(tab.id);
+        }).then(function (reply) {
+          lastReply = reply;
+          renderNotice();
         });
       });
     }).catch(function () { showNotice(''); });
   }
 
-  function cantShow() {
-    return "Pace can't show on this page. Your settings still apply to other tabs.";
+  function renderNotice() {
+    var tab = lastTab;
+    var reply = lastReply;
+    if (!tab || tab.id === undefined) return showNotice(cantShow());
+    if (!reply) {
+      if (isFileUrl(tab.url) && !tab.fileAccess) {
+        return showNotice('Local files need one extra permission.', 'warn', {
+          label: 'Allow',
+          run: function () { chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id }); }
+        });
+      }
+      if (Core.isRestrictedUrl(tab.url, tab.fileAccess)) return showNotice(cantShow());
+      return showNotice('Reload this tab to use Pace here.');
+    }
+    if (reply.unsupported) return showNotice(cantShow());
+    // reply.enabled guards against a ping taken before the switch was flipped.
+    if (settings.enabled && reply.enabled && !reply.mounted) return showNotice("Pace isn't showing here. Try reloading this tab.");
+    if (settings.enabled && reply.pdf) return showNotice('On PDFs the band stays put. Scroll the text through it.', 'hint');
+    showNotice('');
   }
 
-  function noReply(url, fileAccess) {
-    return Core.isRestrictedUrl(url, fileAccess) ? cantShow() : 'Reload this tab to use Pace here.';
+  function isFileUrl(url) {
+    return typeof url === 'string' && url.toLowerCase().indexOf('file://') === 0;
+  }
+
+  function cantShow() {
+    return "Chrome doesn't let extensions run on this page. Pace still works in your other tabs.";
   }
 
   function onLoaded(r) {

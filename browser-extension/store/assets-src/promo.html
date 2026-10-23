@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; overflow: hidden; }
+    body {
+      width: var(--w); height: var(--h);
+      position: relative;
+      background: #22252d;
+      font-family: -apple-system, BlinkMacSystemFont, system-ui, sans-serif;
+      color: #ece8df;
+    }
+    .lines { position: absolute; inset: 0; padding: 7% 9%; display: flex; flex-direction: column; justify-content: space-between; }
+    .line { height: calc(var(--h) * 0.03); border-radius: 99px; background: #4a4e58; }
+    .band {
+      position: absolute; left: 0; right: 0; top: 50%; height: 34%;
+      transform: translateY(-50%);
+      background: rgba(247, 245, 240, 0.97);
+      box-shadow: inset 4px 0 0 #f0c36a;
+      display: flex; align-items: center; justify-content: center; gap: 4%;
+      color: #22252d;
+    }
+    .mark { font: 600 calc(var(--h) * 0.2)/1 "New York", ui-serif, Georgia, serif; letter-spacing: -0.01em; }
+    .tag { font-size: calc(var(--h) * 0.065); font-weight: 500; color: #4b4f58; max-width: 45%; line-height: 1.25; text-wrap: balance; }
+  </style>
+</head>
+<body>
+  <div class="lines">
+    <span class="line" style="width:62%"></span><span class="line" style="width:88%"></span>
+    <span class="line" style="width:80%"></span><span class="line" style="width:92%"></span>
+    <span class="line" style="width:74%"></span><span class="line" style="width:86%"></span>
+    <span class="line" style="width:70%"></span><span class="line" style="width:90%"></span>
+  </div>
+  <div class="band"><span class="mark">Pace</span><span class="tag">A calm focus band for reading on the web</span></div>
+</body>
+</html>

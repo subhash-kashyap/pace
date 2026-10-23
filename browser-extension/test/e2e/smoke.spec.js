@@ -17,6 +17,6 @@ test('popup opens without errors', async ({ context, extensionId }) => {
   popup.on('pageerror', (e) => errors.push(e.message));
   popup.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
-  await expect(popup.getByRole('switch', { name: 'Focus overlay' })).toBeVisible();
+  await expect(popup.getByRole('switch', { name: 'Reading focus' })).toBeVisible();
   expect(errors).toEqual([]);
 });

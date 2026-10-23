@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <style>
+    html, body { margin: 0; width: 1280px; height: 800px; overflow: hidden; }
+    .shot { position: absolute; inset: 0; background: center / cover no-repeat; }
+    .popup {
+      position: absolute; top: 24px; right: 32px; width: 320px;
+      border-radius: 12px; overflow: hidden;
+      box-shadow: 0 24px 60px rgba(0,0,0,.45), 0 0 0 1px rgba(255,255,255,.06);
+    }
+    .popup img { display: block; width: 100%; }
+  </style>
+</head>
+<body>
+  <div class="shot" id="shot"></div>
+  <div class="popup"><img id="popup" alt=""></div>
+</body>
+</html>

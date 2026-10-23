@@ -6,7 +6,8 @@ A lightweight Manifest V3 extension that brings Pace's **Rectangle** reading-foc
 - **Color:** dark or light dimming
 - **Opacity:** 10–100%
 - **Blur:** 0–20px (frosted dim area)
-- **Global on/off:** applies to every tab, live, and persists across restarts
+- **Global on/off:** one large switch at the top of the popup. It applies to every tab, live, and persists across restarts.
+- **Works everywhere Chrome allows:** any web page, local files (once file access is allowed) and PDFs. On PDFs the band stays at the middle of the screen and you scroll the text through it, because Chrome's PDF viewer hides the mouse from extensions.
 
 No build step and no runtime dependencies. The extension is plain JS, HTML and CSS. `node_modules` exists only for the tests.
 
@@ -17,6 +18,12 @@ No build step and no runtime dependencies. The extension is plain JS, HTML and C
 3. Pin Pace from the puzzle-piece menu and click its icon to open the popup.
 
 Any change to a setting in the popup also turns the overlay on, just like the Mac app.
+
+If a tab was open before Pace was installed, opening the popup there injects Pace into it, so you never need to reload. On a `file://` page the popup shows an **Allow** button that opens Pace's details page, where you can turn on **Allow access to file URLs**.
+
+## Publishing
+
+See [`PUBLISHING.md`](PUBLISHING.md) for the Chrome Web Store checklist, [`store/STORE_LISTING.md`](store/STORE_LISTING.md) for copy-paste listing text and privacy answers, and [`PRIVACY.md`](PRIVACY.md) for the privacy policy. `npm run package` builds the upload zip in `dist/`.
 
 ## Analytics (optional)
 
@@ -49,16 +56,19 @@ The e2e tests load the unpacked extension into Playwright's bundled Chromium (br
 | `src/content.js` | Overlay: two panels in a shadow root, moved with `transform` on `requestAnimationFrame` |
 | `src/background.js` | Service worker: default settings, re-injection into open tabs, analytics |
 | `src/popup/` | Popup UI |
+| `scripts/package.sh` | Builds the store zip (`npm run package`) |
+| `scripts/store-assets.js` | Renders store screenshots and promo tiles (`npm run store:assets`) |
+| `store/` | Listing copy, image sources and rendered images |
 
 ## Permissions
 
 - `storage`: settings.
-- `scripting` + `<all_urls>`: the overlay has to appear on every page as soon as you turn it on, including tabs that were already open when the extension was installed or updated. The content script only reads mouse position and its own settings; it never reads page content.
+- `scripting` + `<all_urls>`: the overlay has to appear on every page as soon as you turn it on, including tabs that were already open when the extension was installed or updated. The content script only reads mouse position and its own settings; it never reads page content. Because of this permission, Chrome's install prompt says Pace can "read and change all your data on all websites". That wording is Chrome's and covers any extension that can draw on pages. `PRIVACY.md` explains it for users.
 
 ## Known limitations
 
-- Doesn't run on `chrome://` pages, the Chrome Web Store, or other extensions' pages. The popup says so.
+- Chrome doesn't let any extension run on `chrome://` pages, the Chrome Web Store, other extensions' pages, `view-source:` or `data:` URLs. The popup says so.
 - `file://` pages need **Allow access to file URLs** turned on in the extension's details.
-- The band only follows the mouse in the top-level page. Over iframes (embeds, some editors) it pauses until the cursor leaves them. Chrome's built-in PDF viewer isn't supported.
+- The band only follows the mouse in the top-level page. Over iframes (embeds, some editors) it pauses until the cursor leaves them. In Chrome's PDF viewer it stays at the vertical center.
 - Fullscreen video and page `<dialog>`/popover top-layer elements render above the overlay.
 - Large blur values over heavy pages can cost scroll smoothness. Blur defaults to 0.

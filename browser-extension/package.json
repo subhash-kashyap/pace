@@ -1,13 +1,15 @@
 {
   "name": "pace-browser-extension",
-  "version": "0.1.0",
+  "version": "1.0.0",
   "private": true,
   "description": "Pace reading-focus overlay for Chrome (MV3). No runtime dependencies; devDependencies are for tests only.",
   "license": "MIT",
   "scripts": {
     "test": "npm run test:unit && npm run test:e2e",
     "test:unit": "node --test \"test/unit/*.test.js\"",
-    "test:e2e": "playwright test"
+    "test:e2e": "playwright test",
+    "package": "./scripts/package.sh",
+    "store:assets": "node scripts/store-assets.js"
   },
   "devDependencies": {
     "@playwright/test": "1.63.0"

@@ -32,3 +32,4 @@ browser-extension/node_modules/
 browser-extension/config.json
 browser-extension/test-results/
 browser-extension/playwright-report/
+browser-extension/dist/
