@@ -246,15 +246,16 @@ test('turning Pace off also clears a leftover host from an orphaned instance', a
   await expect.poll(async () => (await overlayState(page)).count).toBe(0);
 });
 
-test('mounts over PDFs with the band at the viewport center', async ({ context, page }) => {
-  await setSettings(context, { enabled: true, size: 'M' });
+// Chrome's PDF viewer never passes mouse events to the page, so a band there could only sit still.
+test('does not mount on PDFs and the ping reports them as PDFs', async ({ context, page }) => {
+  await setSettings(context, { enabled: true });
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
-  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
-  const s = await settledOverlay(page, (s) => s.mounted);
-  expect(s.topBottomEdge).toBeCloseTo(s.viewportHeight / 2 - 150, 0);
-  expect(s.bottomTopEdge).toBeCloseTo(s.viewportHeight / 2 + 150, 0);
-  await setSettings(context, { enabled: false });
-  await expect.poll(async () => (await overlayState(page)).count).toBe(0);
+  const reply = async () => (await getWorker(context)).evaluate(async (url) => {
+    const tab = (await chrome.tabs.query({})).find((t) => t.url === url);
+    return chrome.tabs.sendMessage(tab.id, { type: 'pace_ping' }).catch(() => null);
+  }, page.url());
+  await expect.poll(reply).toMatchObject({ mounted: false, enabled: true, pdf: true });
+  expect((await overlayState(page)).count).toBe(0);
 });
 
 test('does not mount on SVG documents and the ping reports them unsupported', async ({ context, page }) => {

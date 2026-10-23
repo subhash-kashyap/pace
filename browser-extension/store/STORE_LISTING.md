@@ -22,11 +22,11 @@ Pace helps you read on the web without losing your place.
 
 It dims everything on the page except a soft band that follows your mouse. Your eyes stay on the lines you're reading, and the rest of the page fades out of the way.
 
-• One switch: turn Pace on and it works in every tab, including ones already open.
+• One tap: turn Pace on and it works in every tab, including ones already open.
 • Three band sizes: small, medium and large.
 • Dark or light dimming, with adjustable opacity.
 • Optional blur to frost the dimmed parts of the page.
-• Works on articles, docs, email, and PDFs. On PDFs the band stays in the middle of the screen and you scroll the text through it.
+• Works on articles, docs, email, and local files.
 • Links, text selection and typing all keep working through the dimmed area.
 
 Private by design: Pace never reads the text of your pages and never collects your URLs or browsing history. It only uses your mouse's vertical position, inside the tab, to place the band.

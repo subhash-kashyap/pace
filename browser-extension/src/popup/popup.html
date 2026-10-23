@@ -10,15 +10,11 @@
   <main class="panel">
     <h1 class="wordmark">Pace</h1>
 
-    <!-- The one control that matters most: big, labelled, iOS-style. The whole row toggles it. -->
-    <label class="power" for="enabled">
-      <span class="power-text">
-        <span id="power-title" class="power-title">Reading focus</span>
-        <span id="power-status" class="power-status">Off</span>
-      </span>
-      <input id="enabled" type="checkbox" role="switch" aria-labelledby="power-title" aria-describedby="power-status">
-      <span class="track" aria-hidden="true"><span class="thumb"></span></span>
-    </label>
+    <!-- On/off uses the same segmented pattern as the other settings: both states visible, the active one lit. -->
+    <div class="segmented power" role="group" aria-label="Pace" data-setting="enabled">
+      <button type="button" data-value="false" aria-pressed="true">Off</button>
+      <button type="button" data-value="true" aria-pressed="false">On</button>
+    </div>
 
     <!-- Miniature page showing the current overlay; hover to move the band. -->
     <div id="preview" class="preview" aria-hidden="true">

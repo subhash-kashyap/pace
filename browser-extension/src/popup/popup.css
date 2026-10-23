@@ -9,8 +9,6 @@
   --lamp: #f0c36a;
   --lamp-ink: #2a2110;
   --focus: #9cc2ff;
-  --on: #30d158;      /* Apple system green (dark appearance) */
-  --off-track: #3a3d46;
 
   /* Driven by popup.js so the preview mirrors the real overlay. */
   --dim: rgba(0, 0, 0, 0.7);
@@ -45,30 +43,6 @@ html, body {
   font: 600 22px/1 "New York", ui-serif, Georgia, "Times New Roman", serif;
   letter-spacing: -0.01em;
 }
-
-/* Power row: the main on/off. Whole row is the hit target. */
-.power {
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  min-height: 64px;
-  padding: 12px 14px 12px 16px;
-  border-radius: 12px;
-  background: var(--raised);
-  box-shadow: inset 0 0 0 1px var(--line);
-  cursor: pointer;
-  user-select: none;
-  transition: background-color 200ms ease-out, box-shadow 200ms ease-out;
-}
-.power:hover { background: #31353f; }
-.panel.is-on .power { background: rgba(48, 209, 88, 0.12); box-shadow: inset 0 0 0 1px rgba(48, 209, 88, 0.35); }
-
-.power-text { display: flex; flex-direction: column; gap: 2px; }
-.power-title { font-size: 15px; font-weight: 600; color: var(--text); }
-.power-status { font-size: 12px; color: var(--muted); }
-.panel.is-on .power-status { color: var(--on); }
 
 /* Preview: a miniature page with the overlay applied */
 .preview {
@@ -142,7 +116,6 @@ html, body {
   font-size: 12px;
 }
 .notice[hidden] { display: none; }
-.notice.is-hint { background: rgba(236, 232, 223, 0.06); color: var(--muted); }
 
 .notice-action {
   flex: none;
@@ -220,25 +193,11 @@ output {
 .segmented button:hover { color: var(--text); }
 .segmented button[aria-pressed="true"] { background: var(--text); color: var(--base); }
 
-/* Switch: iOS proportions (51 x 31), green when on, white thumb */
-.power input { position: absolute; inset: 0; z-index: 1; opacity: 0; width: 100%; height: 100%; margin: 0; cursor: pointer; }
-.track {
-  flex: none;
-  width: 51px; height: 31px; border-radius: 16px;
-  padding: 2px;
-  display: inline-flex; align-items: center;
-  background: var(--off-track);
-  transition: background-color 200ms ease-out;
-}
-.thumb {
-  width: 27px; height: 27px; border-radius: 50%;
-  background: #fff;
-  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.25), 0 1px 1px rgba(0, 0, 0, 0.16);
-  transition: transform 220ms cubic-bezier(0.3, 0.7, 0.4, 1);
-}
-.power input:checked ~ .track { background: var(--on); }
-.power input:checked ~ .track .thumb { transform: translateX(20px); }
-.power input:focus-visible ~ .track { outline: 2px solid var(--focus); outline-offset: 2px; }
+/* On/off: a full-width, larger segmented control. "On" lights up in lamplight. */
+.segmented.power { display: flex; padding: 3px; border-radius: 10px; }
+.segmented.power button { flex: 1; min-height: 38px; border-radius: 7px; font-size: 14px; font-weight: 600; }
+.segmented.power button[data-value="false"][aria-pressed="true"] { background: var(--raised); color: var(--text); }
+.segmented.power button[data-value="true"][aria-pressed="true"] { background: var(--lamp); color: var(--lamp-ink); }
 
 /* Range */
 input[type="range"] {

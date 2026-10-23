@@ -6,8 +6,8 @@ A lightweight Manifest V3 extension that brings Pace's **Rectangle** reading-foc
 - **Color:** dark or light dimming
 - **Opacity:** 10–100%
 - **Blur:** 0–20px (frosted dim area)
-- **Global on/off:** one large switch at the top of the popup. It applies to every tab, live, and persists across restarts.
-- **Works everywhere Chrome allows:** any web page, local files (once file access is allowed) and PDFs. On PDFs the band stays at the middle of the screen and you scroll the text through it, because Chrome's PDF viewer hides the mouse from extensions.
+- **Global on/off:** a large Off | On control at the top of the popup. It applies to every tab, live, and persists across restarts.
+- **Works everywhere Chrome allows:** any web page and local files (once file access is allowed). Not PDFs: Chrome's PDF viewer hides the mouse from extensions, so the band couldn't follow it.
 
 No build step and no runtime dependencies. The extension is plain JS, HTML and CSS. `node_modules` exists only for the tests.
 
@@ -69,6 +69,6 @@ The e2e tests load the unpacked extension into Playwright's bundled Chromium (br
 
 - Chrome doesn't let any extension run on `chrome://` pages, the Chrome Web Store, other extensions' pages, `view-source:` or `data:` URLs. The popup says so.
 - `file://` pages need **Allow access to file URLs** turned on in the extension's details.
-- The band only follows the mouse in the top-level page. Over iframes (embeds, some editors) it pauses until the cursor leaves them. In Chrome's PDF viewer it stays at the vertical center.
+- The band only follows the mouse in the top-level page. Over iframes (embeds, some editors) it pauses until the cursor leaves them. Chrome's PDF viewer hides the mouse entirely, so Pace doesn't show on PDFs.
 - Fullscreen video and page `<dialog>`/popover top-layer elements render above the overlay.
 - Large blur values over heavy pages can cost scroll smoothness. Blur defaults to 0.

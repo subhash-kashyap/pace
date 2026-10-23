@@ -17,6 +17,6 @@ test('popup opens without errors', async ({ context, extensionId }) => {
   popup.on('pageerror', (e) => errors.push(e.message));
   popup.on('console', (m) => m.type() === 'error' && errors.push(m.text()));
   await popup.goto(`chrome-extension://${extensionId}/src/popup/popup.html`);
-  await expect(popup.getByRole('switch', { name: 'Reading focus' })).toBeVisible();
+  await expect(popup.getByRole('group', { name: 'Pace' })).toBeVisible();
   expect(errors).toEqual([]);
 });

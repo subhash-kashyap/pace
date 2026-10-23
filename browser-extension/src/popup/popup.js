@@ -13,8 +13,6 @@
   var earlyPatch = null; // changes made before stored settings finished loading
 
   var els = {
-    enabled: document.getElementById('enabled'),
-    status: document.getElementById('power-status'),
     notice: document.getElementById('notice'),
     noticeText: document.getElementById('notice-text'),
     noticeAction: document.getElementById('notice-action'),
@@ -28,8 +26,6 @@
   };
 
   function render() {
-    els.enabled.checked = settings.enabled;
-    els.status.textContent = settings.enabled ? 'On in every tab' : 'Off';
     var opacityPct = Math.round(settings.opacity * 100);
     els.opacity.value = String(opacityPct);
     els.opacityValue.textContent = opacityPct + '%';
@@ -103,13 +99,9 @@
   }
 
   function parseValue(setting, raw) {
-    if (setting === 'isDarkMode') return raw === 'true';
+    if (setting === 'isDarkMode' || setting === 'enabled') return raw === 'true';
     return raw;
   }
-
-  els.enabled.addEventListener('change', function () {
-    change({ enabled: els.enabled.checked });
-  });
 
   els.opacity.addEventListener('input', function () {
     change({ opacity: Number(els.opacity.value) / 100 }, true);
@@ -159,11 +151,10 @@
 
   var noticeAction = null;
 
-  // kind: 'warn' (default) or 'hint'. action: { label, run } adds a button.
-  function showNotice(text, kind, action) {
+  // action: { label, run } adds a button.
+  function showNotice(text, action) {
     els.noticeText.textContent = text || '';
     els.notice.hidden = !text;
-    els.notice.classList.toggle('is-hint', kind === 'hint');
     noticeAction = text && action ? action.run : null;
     els.noticeAction.hidden = !noticeAction;
     els.noticeAction.textContent = noticeAction ? action.label : '';
@@ -212,7 +203,7 @@
     if (!tab || tab.id === undefined) return showNotice(cantShow());
     if (!reply) {
       if (isFileUrl(tab.url) && !tab.fileAccess) {
-        return showNotice('Local files need one extra permission.', 'warn', {
+        return showNotice('Local files need one extra permission.', {
           label: 'Allow',
           run: function () { chrome.tabs.create({ url: 'chrome://extensions/?id=' + chrome.runtime.id }); }
         });
@@ -221,9 +212,9 @@
       return showNotice('Reload this tab to use Pace here.');
     }
     if (reply.unsupported) return showNotice(cantShow());
+    if (reply.pdf) return showNotice("Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.");
     // reply.enabled guards against a ping taken before the switch was flipped.
     if (settings.enabled && reply.enabled && !reply.mounted) return showNotice("Pace isn't showing here. Try reloading this tab.");
-    if (settings.enabled && reply.pdf) return showNotice('On PDFs the band stays put. Scroll the text through it.', 'hint');
     showNotice('');
   }
 

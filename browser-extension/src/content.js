@@ -62,8 +62,8 @@
     return !root || root.namespaceURI !== 'http://www.w3.org/1999/xhtml';
   }
 
-  // Chrome's PDF viewer swallows mouse events, so on PDFs the band stays at a fixed reading
-  // position (viewport center) and the text is scrolled through it.
+  // Chrome's PDF viewer runs in its own frame and never passes mouse events to this page, so a
+  // band here could not follow the cursor. Don't mount; the popup explains why.
   function isPdf() {
     return document.contentType === 'application/pdf';
   }
@@ -143,7 +143,7 @@
 
   function mount() {
     if (host && host.isConnected) return;
-    if (unsupportedDocument()) return;
+    if (unsupportedDocument() || isPdf()) return;
     var root = document.documentElement;
     // Replace any host left behind by an orphaned script (extension update/reload).
     removeAllHosts();

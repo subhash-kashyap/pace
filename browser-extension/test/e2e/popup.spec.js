@@ -7,11 +7,13 @@ async function openPopup(context, extensionId) {
   return popup;
 }
 
+const power = (popup, label) => popup.getByRole('group', { name: 'Pace' }).getByRole('button', { name: label, exact: true });
+
 const settings = async (context) => (await getStorage(context, 'paceSettings')).paceSettings;
 
 test('fresh install shows default controls', async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  await expect(popup.getByRole('switch', { name: 'Reading focus' })).not.toBeChecked();
+  await expect(power(popup, 'Off')).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('button', { name: 'Dark' })).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('slider', { name: 'Opacity' })).toHaveValue('70');
@@ -21,13 +23,13 @@ test('fresh install shows default controls', async ({ context, extensionId }) =>
   await expect(popup.getByRole('checkbox')).toHaveCount(0); // no analytics toggle
 });
 
-test('toggling the switch turns the overlay on in an open tab', async ({ context, extensionId, page }) => {
+test('turning Pace on from the popup shows the overlay in an open tab', async ({ context, extensionId, page }) => {
   await page.goto(`${FIXTURE_ORIGIN}/article.html`);
   const popup = await openPopup(context, extensionId);
-  await popup.getByRole('switch', { name: 'Reading focus' }).check();
+  await power(popup, 'On').click();
   await expect.poll(async () => (await settings(context)).enabled).toBe(true);
   await expect.poll(async () => (await overlayState(page)).count).toBe(1);
-  await popup.getByRole('switch', { name: 'Reading focus' }).uncheck();
+  await power(popup, 'Off').click();
   await expect.poll(async () => (await overlayState(page)).count).toBe(0);
 });
 
@@ -37,7 +39,7 @@ test('picking a size while off also turns Pace on', async ({ context, extensionI
   await expect.poll(() => settings(context)).toMatchObject({ size: 'L', enabled: true });
   await expect(popup.getByRole('button', { name: 'Large' })).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('button', { name: 'Medium' })).toHaveAttribute('aria-pressed', 'false');
-  await expect(popup.getByRole('switch', { name: 'Reading focus' })).toBeChecked();
+  await expect(power(popup, 'On')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('color, opacity and blur controls write settings and labels', async ({ context, extensionId }) => {
@@ -61,7 +63,7 @@ test('reopening the popup reflects saved values', async ({ context, extensionId 
   popup = await openPopup(context, extensionId);
   await expect(popup.getByRole('button', { name: 'Small' })).toHaveAttribute('aria-pressed', 'true');
   await expect(popup.getByRole('slider', { name: 'Opacity' })).toHaveValue('55');
-  await expect(popup.getByRole('switch', { name: 'Reading focus' })).toBeChecked();
+  await expect(power(popup, 'On')).toHaveAttribute('aria-pressed', 'true');
 });
 
 test('preview mirrors size, color and on/off', async ({ context, extensionId }) => {
@@ -112,13 +114,15 @@ test('notice: shown on restricted pages, hidden on live pages', async ({ context
   await expect(popup.locator('#notice')).toBeHidden();
 });
 
-test('power row shows a clear on/off status', async ({ context, extensionId }) => {
+test('on/off control lights exactly one state and works from the keyboard', async ({ context, extensionId }) => {
   const popup = await openPopup(context, extensionId);
-  await expect(popup.locator('#power-status')).toHaveText('Off');
-  await popup.locator('.power').click();
+  await power(popup, 'On').click();
   await expect.poll(async () => (await settings(context)).enabled).toBe(true);
-  await expect(popup.locator('#power-status')).toHaveText('On in every tab');
-  await expect(popup.getByRole('switch', { name: 'Reading focus' })).toBeChecked();
+  await expect(power(popup, 'On')).toHaveAttribute('aria-pressed', 'true');
+  await expect(power(popup, 'Off')).toHaveAttribute('aria-pressed', 'false');
+  await popup.keyboard.press('ArrowLeft');
+  await expect.poll(async () => (await settings(context)).enabled).toBe(false);
+  await expect(power(popup, 'Off')).toBeFocused();
 });
 
 test('notice: tab without a content script gets one injected instead of a reload prompt', async ({ context, extensionId, page }) => {
@@ -131,14 +135,14 @@ test('notice: tab without a content script gets one injected instead of a reload
   await expect(popup.locator('#notice')).toBeHidden();
 });
 
-test('notice: PDFs show a hint while Pace is on', async ({ context, extensionId, page }) => {
+test('notice: PDFs explain why Pace is not shown', async ({ context, extensionId, page }) => {
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
   const popup = await openPopup(context, extensionId);
-  await popup.locator('.power').click();
+  await power(popup, 'On').click();
   await expect.poll(async () => (await settings(context)).enabled).toBe(true);
   await page.bringToFront();
   await popup.evaluate(() => globalThis.__pacePopup.checkActiveTab());
-  await expect(popup.locator('#notice')).toHaveText('On PDFs the band stays put. Scroll the text through it.');
+  await expect(popup.locator('#notice')).toHaveText("Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.");
 });
 
 test('every control has an accessible name', async ({ context, extensionId }) => {
