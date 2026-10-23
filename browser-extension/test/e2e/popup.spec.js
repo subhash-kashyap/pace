@@ -136,13 +136,17 @@ test('notice: tab without a content script gets one injected instead of a reload
 });
 
 test('notice: PDFs explain why Pace is not shown', async ({ context, extensionId, page }) => {
+  const PDF_NOTICE = "Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.";
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);
   const popup = await openPopup(context, extensionId);
+  await page.bringToFront();
+  // Shown while Off too, so nobody turns Pace on expecting it to work here.
+  await popup.evaluate(() => globalThis.__pacePopup.checkActiveTab());
+  await expect(popup.locator('#notice')).toHaveText(PDF_NOTICE);
   await power(popup, 'On').click();
   await expect.poll(async () => (await settings(context)).enabled).toBe(true);
-  await page.bringToFront();
   await popup.evaluate(() => globalThis.__pacePopup.checkActiveTab());
-  await expect(popup.locator('#notice')).toHaveText("Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.");
+  await expect(popup.locator('#notice')).toHaveText(PDF_NOTICE);
 });
 
 test('every control has an accessible name', async ({ context, extensionId }) => {

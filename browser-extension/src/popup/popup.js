@@ -213,7 +213,7 @@
     }
     if (reply.unsupported) return showNotice(cantShow());
     if (reply.pdf) return showNotice("Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.");
-    // reply.enabled guards against a ping taken before the switch was flipped.
+    // reply.enabled guards against a ping taken before Pace was turned on.
     if (settings.enabled && reply.enabled && !reply.mounted) return showNotice("Pace isn't showing here. Try reloading this tab.");
     showNotice('');
   }
