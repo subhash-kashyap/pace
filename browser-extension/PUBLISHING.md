@@ -10,7 +10,6 @@ A step-by-step checklist. Listing copy, permission justifications and privacy an
 
 ## 1. Before every release
 
-- [ ] Replace `CONTACT_EMAIL` in [`PRIVACY.md`](PRIVACY.md) with the public support address (first release only).
 - [ ] Merge to `main` so the privacy policy URL resolves (first release only).
 - [ ] Bump `version` in **both** `manifest.json` and `package.json`. The store rejects re-uploads of a version it has already seen. Use `1.0.1`, `1.1.0` and so on.
 - [ ] **Analytics decision:**

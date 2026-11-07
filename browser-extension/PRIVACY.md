@@ -35,7 +35,7 @@ We use this data only to understand and improve Pace. We do not sell it, share i
 
 ## Data retention and deletion
 
-Settings live on your device and are deleted when you uninstall Pace. Usage events are kept in PostHog for as long as they help us improve the product. To ask for the events tied to your install to be deleted, email us (below). Since the install ID is random, include roughly when you installed Pace and we'll do our best to find it.
+Settings live on your device and are deleted when you uninstall Pace. Usage events are kept in PostHog for as long as they help us improve the product. To ask for the events tied to your install to be deleted, contact us (below). Since the install ID is random, include roughly when you installed Pace and we'll do our best to find it.
 
 ## Changes
 
@@ -43,4 +43,4 @@ If this policy changes, we'll update this page and the date above.
 
 ## Contact
 
-Questions: **CONTACT_EMAIL** <!-- TODO before publishing: replace with the support address you want public -->
+Questions or deletion requests: open an issue at <https://github.com/subhash-kashyap/pace/issues>, or use the **Support** tab on Pace's Chrome Web Store page.
