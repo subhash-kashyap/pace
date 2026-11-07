@@ -214,7 +214,26 @@ importScripts('core.js');
     });
   }
 
-  function onMessage(message, sender) {
+  // Content scripts can't read the tab's zoom themselves; answer for the tab that asked.
+  function replyWithZoom(sender, sendResponse) {
+    if (!sender || sender.id !== chrome.runtime.id || !sender.tab || typeof sender.tab.id !== 'number') return false;
+    if (!chrome.tabs || typeof chrome.tabs.getZoom !== 'function') return false;
+    chrome.tabs.getZoom(sender.tab.id).then(
+      function (zoom) { sendResponse({ zoom: zoom }); },
+      function () { sendResponse({ zoom: 1 }); }
+    );
+    return true; // keep the channel open for the async reply
+  }
+
+  // Push zoom changes so the band keeps its on-screen size (Cmd +/−, Ctrl+scroll, menu).
+  function onZoomChange(info) {
+    if (!info || typeof info.tabId !== 'number') return;
+    return chrome.tabs.sendMessage(info.tabId, { type: 'pace_zoom', zoom: info.newZoomFactor })
+      .catch(function () { /* no content script in that tab */ });
+  }
+
+  function onMessage(message, sender, sendResponse) {
+    if (message && message.type === 'pace_get_zoom') return replyWithZoom(sender, sendResponse);
     if (!message || message.type !== 'popup_opened') return;
     if (!sender || sender.id !== chrome.runtime.id || sender.tab) return;
     enqueue(function () { send([{ event: 'popup_opened', properties: {} }]); });
@@ -224,9 +243,11 @@ importScripts('core.js');
   chrome.runtime.onStartup.addListener(onStartup);
   chrome.storage.onChanged.addListener(onStorageChanged);
   chrome.runtime.onMessage.addListener(onMessage);
+  if (chrome.tabs && chrome.tabs.onZoomChange) chrome.tabs.onZoomChange.addListener(onZoomChange);
 
   // Exposed for tests (Node vm harness and e2e).
   root.__paceBackground = {
+    onZoomChange: onZoomChange,
     onInstalled: onInstalled,
     onStartup: onStartup,
     onStorageChanged: onStorageChanged,

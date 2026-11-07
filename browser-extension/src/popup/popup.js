@@ -166,6 +166,7 @@
 
   var lastTab = null;
   var lastReply = null;
+  var checkCount = 0; // only the newest checkActiveTab may update the notice
 
   function ping(tabId) {
     return chrome.tabs.sendMessage(tabId, { type: 'pace_ping' }).catch(function () { return null; });
@@ -178,23 +179,32 @@
       .then(function () { return ping(tabId); }, function () { return null; });
   }
 
+  // Two checks can overlap (popup open, then a re-check after toggling); a slower, older one
+  // must not overwrite the newer result. Results are committed together, only by the latest check.
   function checkActiveTab() {
+    var id = ++checkCount;
+    function current() { return id === checkCount; }
     return chrome.tabs.query({ active: true, currentWindow: true }).then(function (tabs) {
-      var tab = tabs[0];
-      lastTab = tab || null;
-      lastReply = null;
-      if (!tab || tab.id === undefined) return renderNotice();
+      var tab = tabs[0] || null;
+      if (!tab || tab.id === undefined) {
+        if (!current()) return;
+        lastTab = tab;
+        lastReply = null;
+        return renderNotice();
+      }
       return Promise.resolve(chrome.extension.isAllowedFileSchemeAccess()).then(function (fileAccess) {
-        lastTab.fileAccess = fileAccess === true;
+        tab.fileAccess = fileAccess === true;
         return ping(tab.id).then(function (reply) {
-          if (reply || Core.isRestrictedUrl(tab.url, lastTab.fileAccess)) return reply;
+          if (reply || Core.isRestrictedUrl(tab.url, tab.fileAccess)) return reply;
           return injectInto(tab.id);
         }).then(function (reply) {
+          if (!current()) return;
+          lastTab = tab;
           lastReply = reply;
           renderNotice();
         });
       });
-    }).catch(function () { showNotice(''); });
+    }).catch(function () { if (current()) showNotice(''); });
   }
 
   function renderNotice() {

@@ -50,9 +50,16 @@
     };
   }
 
-  function bandHeight(size) {
+  // Browser zoom factor (1 = 100%). Anything unusable falls back to 1.
+  function normalizeZoom(zoom) {
+    return typeof zoom === 'number' && Number.isFinite(zoom) && zoom > 0 ? zoom : 1;
+  }
+
+  // Height in CSS px. Passing the tab's zoom divides it out, so the band covers the same
+  // on-screen height at any zoom level (browser zoom scales CSS px, overlay included).
+  function bandHeight(size, zoom) {
     var multiplier = Object.prototype.hasOwnProperty.call(SIZES, size) ? SIZES[size] : SIZES[DEFAULTS.size];
-    return BASE_BAND_HEIGHT * multiplier;
+    return BASE_BAND_HEIGHT * multiplier / normalizeZoom(zoom);
   }
 
   // Each panel is a full-viewport-height element moved with translateY. The top panel is anchored
@@ -68,8 +75,8 @@
     return 'rgba(' + channel + ', ' + channel + ', ' + channel + ', ' + opacity + ')';
   }
 
-  function blurFilter(radius) {
-    return radius > 0 ? 'blur(' + radius + 'px)' : 'none';
+  function blurFilter(radius, zoom) {
+    return radius > 0 ? 'blur(' + radius / normalizeZoom(zoom) + 'px)' : 'none';
   }
 
   var RESTRICTED_PREFIXES = [
@@ -188,6 +195,7 @@
     MODE: MODE,
     normalizeSettings: normalizeSettings,
     bandHeight: bandHeight,
+    normalizeZoom: normalizeZoom,
     panelOffsets: panelOffsets,
     dimColor: dimColor,
     blurFilter: blurFilter,

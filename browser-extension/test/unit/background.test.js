@@ -19,7 +19,8 @@ function createHarness({
   setFails = () => false // (items) => true makes storage.local.set reject
 } = {}) {
   const store = structuredClone(storage);
-  const listeners = { installed: [], startup: [], changed: [], message: [] };
+  const listeners = { installed: [], startup: [], changed: [], message: [], zoom: [] };
+  const sentToTabs = [];
   const captures = [];
   const injected = [];
   const getCalls = [];
@@ -63,7 +64,20 @@ function createHarness({
       onChanged: { addListener: (fn) => listeners.changed.push(fn) }
     },
     extension: { isAllowedFileSchemeAccess: async () => fileAccess },
-    tabs: { query: async () => tabs },
+    tabs: {
+      query: async () => tabs,
+      async getZoom(tabId) {
+        const tab = tabs.find((t) => t.id === tabId);
+        if (!tab) throw new Error('No tab with id: ' + tabId);
+        return tab.zoom ?? 1;
+      },
+      async sendMessage(tabId, msg) {
+        const tab = tabs.find((t) => t.id === tabId);
+        if (!tab || tab.rejects) throw new Error('Receiving end does not exist');
+        sentToTabs.push({ tabId, msg });
+      },
+      onZoomChange: { addListener: (fn) => listeners.zoom.push(fn) }
+    },
     scripting: {
       async executeScript({ target, files }) {
         const tab = tabs.find((t) => t.id === target.tabId);
@@ -136,6 +150,14 @@ function createHarness({
     install: async (reason = 'install') => { listeners.installed.forEach((fn) => fn({ reason })); },
     startup: async () => { listeners.startup.forEach((fn) => fn()); },
     message: (msg, sender) => listeners.message.forEach((fn) => fn(msg, sender)),
+    // Resolves with the async reply, or undefined when the listener declines to respond.
+    request: (msg, sender) => new Promise((done) => {
+      const resolve = (v) => done(v === undefined ? v : JSON.parse(JSON.stringify(v)));
+      const kept = listeners.message.map((fn) => fn(msg, sender, resolve));
+      if (!kept.includes(true)) resolve(undefined);
+    }),
+    zoomChange: (info) => Promise.all(listeners.zoom.map((fn) => fn(info))),
+    sentToTabs,
     setSettings: (patch) => chrome.storage.local.set({ paceSettings: { ...(store.paceSettings || {}), ...patch } })
   };
 }
@@ -398,4 +420,19 @@ test('install still re-injects and sends app_opened when the settings read fails
   await h.idle();
   assert.deepEqual(h.injected.map((i) => i.tabId), [1]);
   assert.deepEqual(h.events(), ['app_opened']);
+});
+
+test('answers a content script\'s zoom query for its own tab', async () => {
+  const h = createHarness({ tabs: [{ id: 7, url: 'https://a.test/', zoom: 1.5 }] });
+  assert.deepEqual(await h.request({ type: 'pace_get_zoom' }, { id: EXT_ID, tab: { id: 7 } }), { zoom: 1.5 });
+  assert.deepEqual(await h.request({ type: 'pace_get_zoom' }, { id: EXT_ID, tab: { id: 99 } }), { zoom: 1 }, 'getZoom failure falls back to 1');
+  assert.equal(await h.request({ type: 'pace_get_zoom' }, { id: 'someone-else', tab: { id: 7 } }), undefined);
+  assert.equal(await h.request({ type: 'pace_get_zoom' }, { id: EXT_ID }), undefined, 'popup has no tab');
+});
+
+test('zoom changes are pushed to that tab, tolerating tabs without a content script', async () => {
+  const h = createHarness({ tabs: [{ id: 1, url: 'https://a.test/' }, { id: 2, url: 'chrome://settings', rejects: true }] });
+  await h.zoomChange({ tabId: 1, oldZoomFactor: 1, newZoomFactor: 1.25 });
+  await h.zoomChange({ tabId: 2, oldZoomFactor: 1, newZoomFactor: 2 });
+  assert.deepEqual(JSON.parse(JSON.stringify(h.sentToTabs)), [{ tabId: 1, msg: { type: 'pace_zoom', zoom: 1.25 } }]);
 });

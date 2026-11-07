@@ -55,6 +55,17 @@ test('panelOffsets keeps band height exact even when taller than the viewport', 
   assert.equal(o.bottomTranslate - o.topTranslate, 900);
 });
 
+test('bandHeight and blurFilter divide out browser zoom', () => {
+  assert.equal(Core.bandHeight('M', 1.5), 200);
+  assert.equal(Core.bandHeight('S', 0.5), 400);
+  assert.equal(Core.bandHeight('M', 1), 300);
+  for (const bad of [0, -1, NaN, Infinity, '2', null, undefined]) {
+    assert.equal(Core.bandHeight('M', bad), 300, `zoom ${String(bad)} falls back to 1`);
+  }
+  assert.equal(Core.blurFilter(8, 2), 'blur(4px)');
+  assert.equal(Core.blurFilter(0, 2), 'none');
+});
+
 test('dimColor and blurFilter', () => {
   assert.equal(Core.dimColor(true, 0.7), 'rgba(0, 0, 0, 0.7)');
   assert.equal(Core.dimColor(false, 1), 'rgba(255, 255, 255, 1)');

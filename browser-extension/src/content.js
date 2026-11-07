@@ -15,6 +15,9 @@
   var pendingY = null;
   var rafId = 0;
   var dead = false;
+  var zoom = 1; // tab zoom factor; band and blur are divided by it so they keep their on-screen size
+  var zoomRequestInFlight = false;
+  var zoomPushes = 0; // bumped per pushed zoom change so an older query reply can't overwrite it
   var changeCount = 0; // bumped per settings change so a slower storage read can't overwrite a newer render
   // Captured once: an orphaned instance keeps its own (now invalid) runtime even if the world is reused.
   var runtime = null;
@@ -87,16 +90,39 @@
   function applyStyle() {
     if (!host) return;
     host.style.setProperty('--pace-color', Core.dimColor(settings.isDarkMode, settings.opacity));
-    host.style.setProperty('--pace-blur', Core.blurFilter(settings.blurRadius));
+    host.style.setProperty('--pace-blur', Core.blurFilter(settings.blurRadius, zoom));
     applyPosition();
   }
 
   function applyPosition() {
     if (!panels) return;
     if (mouseY === null) mouseY = viewportHeight() / 2;
-    var o = Core.panelOffsets(mouseY, Core.bandHeight(settings.size));
+    var o = Core.panelOffsets(mouseY, Core.bandHeight(settings.size, zoom));
     panels.top.style.transform = 'translate3d(0,' + o.topTranslate + 'px,0)';
     panels.bottom.style.transform = 'translate3d(0,' + o.bottomTranslate + 'px,0)';
+  }
+
+  function setZoom(next) {
+    next = Core.normalizeZoom(next);
+    if (next === zoom) return;
+    zoom = next;
+    applyStyle();
+  }
+
+  // Ask the service worker for this tab's zoom (content scripts can't read it directly).
+  // Zoom changes are also pushed as 'pace_zoom'; this covers mount and anything missed.
+  function requestZoom() {
+    if (zoomRequestInFlight || !contextAlive()) return;
+    zoomRequestInFlight = true;
+    var seen = zoomPushes;
+    try {
+      runtime.sendMessage({ type: 'pace_get_zoom' }).then(function (reply) {
+        zoomRequestInFlight = false;
+        if (reply && !dead && zoomPushes === seen) setZoom(reply.zoom);
+      }, function () { zoomRequestInFlight = false; });
+    } catch (e) {
+      zoomRequestInFlight = false;
+    }
   }
 
   function frame() {
@@ -118,6 +144,7 @@
     if (!contextAlive()) return teardown();
     ensureAttached();
     applyPosition();
+    requestZoom(); // zooming also fires resize
   }
 
   function refresh() {
@@ -132,7 +159,7 @@
   function onPageShow(event) {
     if (!contextAlive()) return teardown();
     ensureAttached();
-    if (event.persisted) refresh();
+    if (event.persisted) { refresh(); requestZoom(); }
   }
 
   function onVisibilityChange() {
@@ -167,6 +194,7 @@
     window.addEventListener('mousemove', onMouseMove, { capture: true, passive: true });
     window.addEventListener('resize', onResize, { passive: true });
     applyStyle();
+    requestZoom();
   }
 
   function unmount() {
@@ -193,11 +221,12 @@
     settings = Core.normalizeSettings(next);
     if (dead) return;
     if (settings.enabled) {
-      if (!host || !host.isConnected) {
+      ensureAttached(); // same repair path as resize/visibility: re-attach the overlay the page dropped
+      if (host && host.isConnected) {
+        applyStyle();
+      } else {
         host = null;
         try { mount(); } catch (e) { unmount(); }
-      } else {
-        applyStyle();
       }
     } else {
       unmount();
@@ -215,6 +244,9 @@
   function onMessage(message, sender, sendResponse) {
     if (message && message.type === 'pace_ping') {
       sendResponse({ mounted: !!(host && host.isConnected), enabled: settings.enabled, unsupported: unsupportedDocument(), pdf: isPdf() });
+    } else if (message && message.type === 'pace_zoom') {
+      zoomPushes++;
+      if (!dead) setZoom(message.zoom);
     }
   }
 

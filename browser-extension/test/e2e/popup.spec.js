@@ -135,6 +135,28 @@ test('notice: tab without a content script gets one injected instead of a reload
   await expect(popup.locator('#notice')).toBeHidden();
 });
 
+test('notice: a slower, older tab check cannot overwrite a newer one', async ({ context, extensionId, page }) => {
+  await page.goto(`${FIXTURE_ORIGIN}/article.html`);
+  const popup = await openPopup(context, extensionId);
+  await page.bringToFront();
+  await popup.evaluate(async () => {
+    const realQuery = chrome.tabs.query.bind(chrome.tabs);
+    let calls = 0;
+    // First check sees a restricted page but answers late; the second sees the live article.
+    chrome.tabs.query = async (q) => {
+      if (calls++ === 0) {
+        await new Promise((r) => setTimeout(r, 400));
+        return [{ id: 987654, url: 'chrome://settings/' }];
+      }
+      return realQuery(q);
+    };
+    const older = globalThis.__pacePopup.checkActiveTab();
+    await globalThis.__pacePopup.checkActiveTab();
+    await older;
+  });
+  await expect(popup.locator('#notice')).toBeHidden();
+});
+
 test('notice: PDFs explain why Pace is not shown', async ({ context, extensionId, page }) => {
   const PDF_NOTICE = "Chrome's PDF viewer hides the mouse from extensions, so Pace can't follow it on PDFs.";
   await page.goto(`${FIXTURE_ORIGIN}/doc.pdf`);

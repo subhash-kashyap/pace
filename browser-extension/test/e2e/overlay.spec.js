@@ -237,6 +237,21 @@ test('overlay re-attaches after a page script removes it', async ({ context, pag
   expect(s.topBottomEdge).toBeCloseTo(250, 0);
 });
 
+test('a settings change re-attaches the same overlay a page script removed', async ({ context, page }) => {
+  await enabledPage(context, page);
+  await page.evaluate(() => {
+    const host = document.querySelector('pace-focus-overlay');
+    host.setAttribute('data-marker', 'original');
+    host.remove();
+  });
+  expect((await overlayState(page)).count).toBe(0);
+  await setSettings(context, { opacity: 0.4 }); // no mouse move or resize: only the settings path runs
+  await expect.poll(async () => (await overlayState(page)).count).toBe(1);
+  expect(await page.evaluate(() => document.querySelector('pace-focus-overlay').getAttribute('data-marker'))).toBe('original');
+  const s = await settledOverlay(page, (s) => s.background === 'rgba(0, 0, 0, 0.4)');
+  expect(s.background).toBe('rgba(0, 0, 0, 0.4)');
+});
+
 test('turning Pace off also clears a leftover host from an orphaned instance', async ({ context, page }) => {
   await enabledPage(context, page);
   // Simulate a stale host left by an orphaned script in addition to the live one.
@@ -278,4 +293,34 @@ test('overlay re-attaches on visibilitychange and pageshow without a mouse move'
   await page.evaluate(() => document.querySelector('pace-focus-overlay').remove());
   await page.evaluate(() => window.dispatchEvent(new PageTransitionEvent('pageshow', { persisted: false })));
   await expect.poll(async () => (await overlayState(page)).count).toBe(1);
+});
+
+async function setTabZoom(context, url, factor) {
+  const worker = await getWorker(context);
+  await worker.evaluate(async ({ url, factor }) => {
+    const [tab] = await chrome.tabs.query({ url });
+    await chrome.tabs.setZoom(tab.id, factor);
+  }, { url, factor });
+}
+
+test('band keeps its on-screen height when the page is zoomed', async ({ context, page }) => {
+  await enabledPage(context, page, { blurRadius: 8 });
+  const height = (s) => s.bottomTopEdge - s.topBottomEdge;
+  expect(height(await settledOverlay(page, (s) => near(height(s), 300)))).toBeCloseTo(300, 0);
+
+  // At 150% zoom, a CSS px is 1.5 screen px, so 200 CSS px = the same 300 px on screen.
+  await setTabZoom(context, ARTICLE, 1.5);
+  let s = await settledOverlay(page, (s) => near(height(s), 200) && s.backdropFilter.startsWith('blur(5.3'));
+  expect(height(s)).toBeCloseTo(200, 0);
+  // 8px / 1.5 = 5.33px; Chrome rounds a little at fractional zoom.
+  expect(parseFloat(s.backdropFilter.slice(5))).toBeCloseTo(8 / 1.5, 0); // clearly below the unscaled 8px
+
+  await setTabZoom(context, ARTICLE, 0.5);
+  s = await settledOverlay(page, (s) => near(height(s), 600));
+  expect(height(s)).toBeCloseTo(600, 0);
+
+  // A fresh load at a remembered zoom level starts at the right size, not the 100% size.
+  await page.reload();
+  s = await settledOverlay(page, (s) => s.mounted && near(height(s), 600));
+  expect(height(s)).toBeCloseTo(600, 0);
 });
